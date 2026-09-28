@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ghost Note</title>
+    <link rel="stylesheet" href="note.css" />
+  </head>
+  <body>
+    <div id="shell" class="shell">
+      <header id="chrome" class="chrome" aria-label="Note controls">
+        <div class="chrome-left">
+          <span class="ghost-mark" title="Ghost Notetaker">◈</span>
+          <input
+            id="title"
+            class="title-input"
+            type="text"
+            maxlength="120"
+            placeholder="Title"
+            spellcheck="false"
+          />
+        </div>
+        <div class="chrome-right">
+          <button type="button" id="btnPreview" class="icon-btn" title="Toggle preview">◈</button>
+          <button type="button" id="btnMono" class="icon-btn" title="Monospace">{}</button>
+          <button type="button" id="btnPin" class="icon-btn" title="Pin always-on-top">📌</button>
+          <button type="button" id="btnGhost" class="icon-btn" title="Click-through">👻</button>
+          <div class="color-wrap">
+            <button type="button" id="btnColor" class="color-dot" title="Color"></button>
+            <div id="palette" class="palette hidden" role="listbox"></div>
+          </div>
+          <label class="slider-wrap" title="Opacity">
+            <input id="opacity" type="range" min="25" max="100" value="88" />
+          </label>
+          <label class="slider-wrap" title="Font size">
+            <input id="fontSize" type="range" min="10" max="28" value="14" />
+          </label>
+          <button type="button" id="btnNew" class="icon-btn" title="New note">＋</button>
+          <button type="button" id="btnHide" class="icon-btn danger" title="Hide note">✕</button>
+        </div>
+      </header>
+      <main class="body">
+        <textarea
+          id="editor"
+          class="editor"
+          spellcheck="true"
+          placeholder="Write in Markdown…"
+        ></textarea>
+        <div id="preview" class="preview hidden" aria-live="polite"></div>
+      </main>
+      <footer class="status">
+        <span id="tagLine" class="tag-line"></span>
+        <span id="modeLabel" class="mode-label">edit</span>
+      </footer>
+    </div>
+    <script src="markdown.js"></script>
+    <script src="note.js"></script>
+  </body>
+</html>

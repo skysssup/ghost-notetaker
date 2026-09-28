@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ghost Notetaker — Notes Manager</title>
+    <link rel="stylesheet" href="manager.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="logo">◈</span>
+          <div>
+            <div class="brand-name">Ghost Notetaker</div>
+            <div class="brand-sub">Notes Manager</div>
+          </div>
+        </div>
+
+        <section class="side-section">
+          <div class="side-header">
+            <span>Workspaces</span>
+            <button type="button" id="btnNewWs" class="mini-btn" title="New workspace">＋</button>
+          </div>
+          <ul id="wsList" class="ws-list"></ul>
+        </section>
+
+        <section class="side-section">
+          <div class="side-header"><span>Tags</span></div>
+          <ul id="tagList" class="tag-list"></ul>
+        </section>
+
+        <div class="side-footer">
+          <button type="button" id="btnShortcuts" class="text-btn">Keyboard Shortcuts</button>
+          <button type="button" id="btnExport" class="text-btn">Export All</button>
+          <button type="button" id="btnImport" class="text-btn">Import…</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="toolbar">
+          <div class="search-wrap">
+            <input id="search" type="search" placeholder="Search notes…" />
+          </div>
+          <div class="toolbar-actions">
+            <select id="templateSelect" title="Template for new note">
+              <option value="blank">Blank</option>
+              <option value="meeting">Meeting notes</option>
+              <option value="demo">Demo talking points</option>
+              <option value="todo">Todo list</option>
+            </select>
+            <button type="button" id="btnNewNote" class="primary-btn">New note</button>
+          </div>
+        </header>
+
+        <div id="noteList" class="note-list" role="list"></div>
+        <div id="empty" class="empty hidden">
+          <div class="empty-icon">◈</div>
+          <h2>No notes here yet</h2>
+          <p>Create a note, pick a template, or switch workspace.</p>
+        </div>
+      </main>
+    </div>
+
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-card" id="modalCard">
+        <header class="modal-head">
+          <h2 id="modalTitle">Dialog</h2>
+          <button type="button" id="modalClose" class="icon-btn">✕</button>
+        </header>
+        <div id="modalBody" class="modal-body"></div>
+        <footer id="modalFooter" class="modal-footer"></footer>
+      </div>
+    </div>
+
+    <script src="manager.js"></script>
+  </body>
+</html>

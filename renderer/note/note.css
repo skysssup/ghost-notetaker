@@ -1,0 +1,341 @@
+:root {
+  --accent: #a78bfa;
+  --accent-soft: rgba(167, 139, 250, 0.35);
+  --text: #1e1b2e;
+  --text-muted: rgba(30, 27, 46, 0.55);
+  --chrome-bg: rgba(255, 255, 255, 0.55);
+  --glass: rgba(255, 255, 255, 0.42);
+  --shadow: 0 12px 40px rgba(40, 20, 80, 0.22);
+  --radius: 16px;
+  --note-tint: #c8d6e5;
+  --opacity: 0.88;
+  --font-size: 14px;
+  --font-stack: 'Segoe UI', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  --mono-stack: 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-stack);
+  color: var(--text);
+  user-select: none;
+}
+
+.shell {
+  position: absolute;
+  inset: 8px;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.18)),
+    color-mix(in srgb, var(--note-tint) calc(var(--opacity) * 100%), transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+  opacity: 1;
+}
+
+.shell.mono {
+  --font-stack: var(--mono-stack);
+}
+
+.chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 4px;
+  min-height: 36px;
+  background: var(--chrome-bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.shell:hover .chrome,
+.shell.chrome-pinned .chrome,
+.chrome:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.chrome-left,
+.chrome-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chrome-right {
+  flex-wrap: nowrap;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.ghost-mark {
+  color: var(--accent);
+  font-size: 14px;
+  padding: 0 4px;
+  -webkit-app-region: no-drag;
+}
+
+.title-input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  border: none;
+  background: transparent;
+  font: 600 13px/1.2 var(--font-stack);
+  color: var(--text);
+  min-width: 60px;
+  max-width: 140px;
+  outline: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.title-input:focus {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.icon-btn.active {
+  background: var(--accent-soft);
+  color: #4c1d95;
+}
+
+.icon-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.color-wrap {
+  position: relative;
+}
+
+.color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  background: var(--note-tint);
+  cursor: pointer;
+  padding: 0;
+}
+
+.palette {
+  position: absolute;
+  top: 26px;
+  right: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
+  background: rgba(30, 27, 46, 0.92);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  z-index: 20;
+}
+
+.palette.hidden {
+  display: none;
+}
+
+.palette button {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.palette button.selected {
+  border-color: #fff;
+}
+
+.slider-wrap {
+  display: flex;
+  align-items: center;
+  width: 56px;
+}
+
+.slider-wrap input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor,
+.preview {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 12px 14px 8px;
+  overflow: auto;
+  font-size: var(--font-size);
+  font-family: var(--font-stack);
+  line-height: 1.45;
+  color: var(--text);
+  user-select: text;
+}
+
+.editor {
+  border: none;
+  resize: none;
+  background: transparent;
+  outline: none;
+}
+
+.editor.hidden,
+.preview.hidden {
+  display: none;
+}
+
+.preview h1,
+.preview h2,
+.preview h3,
+.preview h4 {
+  margin: 0.4em 0 0.25em;
+  line-height: 1.25;
+}
+
+.preview h1 {
+  font-size: 1.35em;
+}
+.preview h2 {
+  font-size: 1.2em;
+}
+.preview h3 {
+  font-size: 1.08em;
+}
+
+.preview p {
+  margin: 0.35em 0;
+}
+
+.preview code {
+  font-family: var(--mono-stack);
+  background: rgba(0, 0, 0, 0.08);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+.preview pre {
+  background: rgba(30, 27, 46, 0.12);
+  padding: 10px 12px;
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.preview pre code {
+  background: none;
+  padding: 0;
+}
+
+.preview ul,
+.preview ol {
+  margin: 0.35em 0;
+  padding-left: 1.3em;
+}
+
+.preview ul.task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
+.preview .task-item label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.preview .task-check {
+  margin-top: 0.25em;
+  accent-color: var(--accent);
+}
+
+.preview a {
+  color: #5b21b6;
+}
+
+.preview hr {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.15);
+  margin: 0.8em 0;
+}
+
+.status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 10px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.tag-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 70%;
+}
+
+.mode-label {
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+/* Resize affordance hint at corners via transparent padding already handled by Electron */

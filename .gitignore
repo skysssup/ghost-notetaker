@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Build / packager output
+dist/
+out/
+release/
+*.exe
+*.dmg
+*.blockmap
+*.AppImage
+
+# Logs & debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Electron user data (if ever written under the repo)
+userData/
+*-user-data/
+ghost-notetaker-data.json
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Misc
+*.tmp
+*.temp
+.cache/

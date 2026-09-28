@@ -1,0 +1,84 @@
+{
+  "name": "ghost-notetaker",
+  "version": "0.1.0",
+  "description": "Translucent sticky notes invisible to screen sharing \u2014 local tray app with workspaces, tags, and markdown.",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win"
+  },
+  "author": {
+    "name": "Sky",
+    "url": "https://github.com/skysssup"
+  },
+  "license": "MIT",
+  "keywords": [
+    "sticky-notes",
+    "notes",
+    "electron",
+    "screen-sharing",
+    "content-protection",
+    "privacy",
+    "menubar",
+    "tray",
+    "markdown",
+    "workspaces",
+    "offline",
+    "desktop"
+  ],
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "prettier": "^3.9.9"
+  },
+  "build": {
+    "appId": "com.ghostnotetaker.app",
+    "productName": "Ghost Notetaker",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main/**/*",
+      "renderer/**/*",
+      "build/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ghost Notetaker"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skysssup/ghost-notetaker.git"
+  },
+  "homepage": "https://github.com/skysssup/ghost-notetaker",
+  "bugs": {
+    "url": "https://github.com/skysssup/ghost-notetaker/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

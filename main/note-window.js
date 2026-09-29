@@ -78,6 +78,12 @@ class NoteWindowController {
       query: { id: noteId }
     });
 
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', (event, url) => {
+      // Stay on the local note page; never follow in-window navigations.
+      if (!url.startsWith('file:')) event.preventDefault();
+    });
+
     this.attachShortcuts(win);
 
     win.once('ready-to-show', () => {

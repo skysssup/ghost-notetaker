@@ -2,8 +2,8 @@
 
 /**
  * Tiny Markdown subset → safe HTML.
- * Supports: headings, bold/italic, inline code, fenced code, links,
- * unordered/ordered lists, task checkboxes, paragraphs, horizontal rules.
+ * Supports: headings, bold/italic/strikethrough, inline code, fenced code, links,
+ * unordered/ordered lists, task checkboxes, paragraphs, blockquotes, horizontal rules.
  */
 function escapeHtml(s) {
   return String(s)
@@ -18,6 +18,7 @@ function inlineFormat(text) {
   s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
   s = s.replace(/(^|[^\w*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
   s = s.replace(/(^|[^\w_])_([^_]+)_(?!_)/g, '$1<em>$2</em>');
   s = s.replace(

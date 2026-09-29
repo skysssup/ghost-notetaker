@@ -44,6 +44,10 @@ class ManagerWindowController {
 
     applyContentProtection(this.win, true);
     this.win.loadFile(path.join(__dirname, '..', 'renderer', 'manager', 'manager.html'));
+    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.win.webContents.on('will-navigate', (event, url) => {
+      if (!url.startsWith('file:')) event.preventDefault();
+    });
     this.attachShortcuts(this.win);
 
     this.win.once('ready-to-show', () => {

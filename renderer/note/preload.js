@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('ghostNote', {
   setClickThrough: (id, enabled) => ipcRenderer.invoke('notes:setClickThrough', id, enabled),
   chromeHover: (id, hovering) => ipcRenderer.invoke('notes:chromeHover', id, hovering),
   createNote: (options) => ipcRenderer.invoke('notes:create', options),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   onUpdated: (cb) => {
     const handler = (_e, note) => cb(note);
     ipcRenderer.on('note:updated', handler);

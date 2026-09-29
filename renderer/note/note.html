@@ -22,25 +22,26 @@
             maxlength="120"
             placeholder="Title"
             spellcheck="false"
+            aria-label="Note title"
           />
         </div>
         <div class="chrome-right">
-          <button type="button" id="btnPreview" class="icon-btn" title="Toggle preview (⌘⇧P)">◈</button>
-          <button type="button" id="btnMono" class="icon-btn" title="Monospace">{}</button>
-          <button type="button" id="btnPin" class="icon-btn" title="Pin always-on-top">📌</button>
-          <button type="button" id="btnGhost" class="icon-btn" title="Click-through">👻</button>
+          <button type="button" id="btnPreview" class="icon-btn" title="Toggle preview (⌘⇧P)" aria-label="Toggle markdown preview" aria-pressed="false">◈</button>
+          <button type="button" id="btnMono" class="icon-btn" title="Monospace" aria-label="Toggle monospace font" aria-pressed="false">{}</button>
+          <button type="button" id="btnPin" class="icon-btn" title="Pin always-on-top" aria-label="Pin always on top" aria-pressed="true">📌</button>
+          <button type="button" id="btnGhost" class="icon-btn" title="Click-through" aria-label="Toggle click-through" aria-pressed="false">👻</button>
           <div class="color-wrap">
-            <button type="button" id="btnColor" class="color-dot" title="Color"></button>
+            <button type="button" id="btnColor" class="color-dot" title="Color" aria-label="Choose note color" aria-haspopup="listbox"></button>
             <div id="palette" class="palette hidden" role="listbox"></div>
           </div>
           <label class="slider-wrap" title="Opacity">
-            <input id="opacity" type="range" min="25" max="100" value="88" />
+            <input id="opacity" type="range" min="25" max="100" value="88" aria-label="Opacity" />
           </label>
           <label class="slider-wrap" title="Font size">
-            <input id="fontSize" type="range" min="10" max="28" value="14" />
+            <input id="fontSize" type="range" min="10" max="28" value="14" aria-label="Font size" />
           </label>
-          <button type="button" id="btnNew" class="icon-btn" title="New note">＋</button>
-          <button type="button" id="btnHide" class="icon-btn danger" title="Hide note">✕</button>
+          <button type="button" id="btnNew" class="icon-btn" title="New note" aria-label="Create new note">＋</button>
+          <button type="button" id="btnHide" class="icon-btn danger" title="Hide note" aria-label="Hide note">✕</button>
         </div>
       </header>
 
@@ -48,6 +49,7 @@
         <button type="button" data-md="h2" title="Heading">H</button>
         <button type="button" data-md="bold" title="Bold"><strong>B</strong></button>
         <button type="button" data-md="italic" title="Italic"><em>I</em></button>
+        <button type="button" data-md="strike" title="Strikethrough"><s>S</s></button>
         <button type="button" data-md="code" title="Inline code">&lt;/&gt;</button>
         <button type="button" data-md="link" title="Link">🔗</button>
         <span class="md-sep"></span>
@@ -64,8 +66,9 @@
           class="editor"
           spellcheck="true"
           placeholder="Write in Markdown…"
+          aria-label="Note content"
         ></textarea>
-        <div id="preview" class="preview hidden" aria-live="polite"></div>
+        <div id="preview" class="preview hidden" aria-live="polite" role="article" aria-label="Markdown preview"></div>
       </main>
 
       <footer class="status">
@@ -78,6 +81,7 @@
             maxlength="32"
             placeholder="+ tag"
             spellcheck="false"
+            aria-label="Add tag"
           />
         </div>
         <span id="modeLabel" class="mode-label">edit</span>

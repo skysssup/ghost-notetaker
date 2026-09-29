@@ -17,8 +17,9 @@ Lives in the **menu bar / system tray** (no Dock icon on macOS). Single-instance
 
 - Create / edit / hide / delete notes with frosted-glass chrome
 - Color palette (12 tints), opacity & font-size sliders, monospace toggle
-- Markdown toolbar (headings, bold/italic, lists, checklists, links, quotes)
+- Markdown toolbar (headings, bold/italic/strikethrough, lists, checklists, links, quotes)
 - Interactive checklists in preview mode
+- Preview links open externally (http/https only)
 - Inline tag chips on each note
 - Workspaces: create / rename / delete / switch; move notes between them
 - Notes Manager: fast search, sort, tag & visibility filters, bulk show/hide

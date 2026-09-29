@@ -46,4 +46,11 @@ describe('markdown', () => {
     const html = renderMarkdown('```\nconst x = 1;\n```');
     assert.match(html, /<pre><code>const x = 1;/);
   });
+
+  it('renders strikethrough', () => {
+    const html = renderMarkdown('gone ~~old~~ stay');
+    assert.match(html, /<del>old<\/del>/);
+    assert.match(html, /gone/);
+    assert.match(html, /stay/);
+  });
 });

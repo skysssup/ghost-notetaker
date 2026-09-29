@@ -145,6 +145,38 @@ function createId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
 }
 
+const TITLE_MAX = 200;
+const CONTENT_MAX = 200000;
+const TAG_MAX_LEN = 32;
+const TAG_MAX_COUNT = 48;
+
+/** Lowercase, trim, drop empties, dedupe — keeps first-seen casing form as lowercase. */
+function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of tags) {
+    const t = String(raw || '')
+      .trim()
+      .replace(/^#+/, '')
+      .toLowerCase()
+      .slice(0, TAG_MAX_LEN);
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+    if (out.length >= TAG_MAX_COUNT) break;
+  }
+  return out;
+}
+
+function clampTitle(title) {
+  return String(title != null ? title : 'Untitled').slice(0, TITLE_MAX);
+}
+
+function clampContent(content) {
+  return String(content != null ? content : '').slice(0, CONTENT_MAX);
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -207,9 +239,9 @@ function createNoteRecord(partial = {}, settings = null) {
   return {
     id: partial.id || createId('note'),
     workspaceId: partial.workspaceId,
-    title: partial.title != null ? String(partial.title) : 'Untitled',
-    content: partial.content != null ? String(partial.content) : '',
-    tags: Array.isArray(partial.tags) ? partial.tags.map(String) : [],
+    title: clampTitle(partial.title != null ? partial.title : 'Untitled'),
+    content: clampContent(partial.content != null ? partial.content : ''),
+    tags: normalizeTags(partial.tags),
     color: partial.color || defaults.defaultColor || 'mist',
     opacity: clamp(
       partial.opacity != null ? Number(partial.opacity) : defaults.defaultOpacity,
@@ -520,7 +552,7 @@ class Store {
     const set = new Set();
     for (const n of this.state.notes) {
       if (workspaceId && n.workspaceId !== workspaceId) continue;
-      for (const t of n.tags) set.add(t);
+      for (const t of n.tags) set.add(String(t).toLowerCase());
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
@@ -575,7 +607,9 @@ class Store {
       if (key === 'bounds') note.bounds = normalizeBounds(patch.bounds);
       else if (key === 'opacity') note.opacity = clamp(Number(patch.opacity), 0.25, 1);
       else if (key === 'fontSize') note.fontSize = clamp(Number(patch.fontSize), 10, 28);
-      else if (key === 'tags') note.tags = Array.isArray(patch.tags) ? patch.tags.map(String) : [];
+      else if (key === 'tags') note.tags = normalizeTags(patch.tags);
+      else if (key === 'title') note.title = clampTitle(patch.title);
+      else if (key === 'content') note.content = clampContent(patch.content);
       else if (key === 'workspaceId') {
         if (this.state.workspaces.some((w) => w.id === patch.workspaceId)) {
           note.workspaceId = patch.workspaceId;
@@ -763,6 +797,10 @@ module.exports = {
   STORE_VERSION,
   NOTE_COLORS,
   TEMPLATES,
+  TITLE_MAX,
+  CONTENT_MAX,
+  TAG_MAX_LEN,
+  TAG_MAX_COUNT,
   defaultShortcuts,
   defaultSettings,
   createNoteRecord,
@@ -770,6 +808,9 @@ module.exports = {
   migrate,
   createId,
   clamp,
+  clampTitle,
+  clampContent,
+  normalizeTags,
   normalizeBounds,
   sortNotes
 };

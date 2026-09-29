@@ -78,9 +78,13 @@
     els.btnColor.style.background = colorHex(n.color);
     els.shell.classList.toggle('mono', Boolean(n.monospace));
     els.btnMono.classList.toggle('active', Boolean(n.monospace));
+    els.btnMono.setAttribute('aria-pressed', String(Boolean(n.monospace)));
     els.btnPin.classList.toggle('active', n.pinned !== false);
+    els.btnPin.setAttribute('aria-pressed', String(n.pinned !== false));
     els.btnGhost.classList.toggle('active', Boolean(n.clickThrough));
+    els.btnGhost.setAttribute('aria-pressed', String(Boolean(n.clickThrough)));
     els.btnPreview.classList.toggle('active', Boolean(n.previewMode));
+    els.btnPreview.setAttribute('aria-pressed', String(Boolean(n.previewMode)));
     els.btnPreview.textContent = n.previewMode ? '✎' : '◈';
     setPreviewMode(Boolean(n.previewMode));
     renderTags();
@@ -112,6 +116,10 @@
     els.preview.querySelectorAll('a').forEach((a) => {
       a.addEventListener('click', (e) => {
         e.preventDefault();
+        const href = a.getAttribute('href');
+        if (href && window.ghostNote.openExternal) {
+          window.ghostNote.openExternal(href);
+        }
       });
     });
   }
@@ -207,6 +215,9 @@
       case 'italic':
         wrapSelection('*', '*', 'italic');
         break;
+      case 'strike':
+        wrapSelection('~~', '~~', 'struck');
+        break;
       case 'code':
         wrapSelection('`', '`', 'code');
         break;
@@ -265,6 +276,7 @@
     queueSave({ previewMode });
     setPreviewMode(previewMode);
     els.btnPreview.classList.toggle('active', previewMode);
+    els.btnPreview.setAttribute('aria-pressed', String(previewMode));
     els.btnPreview.textContent = previewMode ? '✎' : '◈';
   });
 
@@ -273,12 +285,14 @@
     queueSave({ monospace });
     els.shell.classList.toggle('mono', monospace);
     els.btnMono.classList.toggle('active', monospace);
+    els.btnMono.setAttribute('aria-pressed', String(monospace));
   });
 
   els.btnPin.addEventListener('click', () => {
     const pinned = !note.pinned;
     queueSave({ pinned });
     els.btnPin.classList.toggle('active', pinned);
+    els.btnPin.setAttribute('aria-pressed', String(pinned));
   });
 
   els.btnGhost.addEventListener('click', async () => {
@@ -286,6 +300,7 @@
     await window.ghostNote.setClickThrough(noteId, clickThrough);
     note.clickThrough = clickThrough;
     els.btnGhost.classList.toggle('active', clickThrough);
+    els.btnGhost.setAttribute('aria-pressed', String(clickThrough));
   });
 
   els.btnColor.addEventListener('click', (e) => {
@@ -308,9 +323,13 @@
   });
 
   function addTagFromInput() {
-    const raw = els.tagInput.value.trim().replace(/^#/, '');
+    const raw = els.tagInput.value
+      .trim()
+      .replace(/^#+/, '')
+      .toLowerCase()
+      .slice(0, 32);
     if (!raw) return;
-    const tags = Array.from(new Set([...(note.tags || []), raw]));
+    const tags = Array.from(new Set([...(note.tags || []).map((x) => String(x).toLowerCase()), raw]));
     note.tags = tags;
     els.tagInput.value = '';
     queueSave({ tags });

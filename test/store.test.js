@@ -278,3 +278,41 @@ describe('Store persistence', () => {
   });
 
 });
+
+describe('tag normalize + size caps', () => {
+  let dir;
+  let store;
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ghost-tags-'));
+    store = new Store(path.join(dir, 'data.json'));
+    store.load();
+  });
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('normalizes tags to lowercase and dedupes', () => {
+    const note = store.createNote({ title: 'T', tags: ['Demo', 'demo', ' #Work ', '', 'Demo'] });
+    assert.deepEqual(note.tags, ['demo', 'work']);
+    store.updateNote(note.id, { tags: ['ALPHA', 'alpha', 'Beta'] });
+    assert.deepEqual(store.getNote(note.id).tags, ['alpha', 'beta']);
+  });
+
+  it('allTags returns lowercase unique chips', () => {
+    store.createNote({ title: 'A', tags: ['Demo'] });
+    store.createNote({ title: 'B', tags: ['demo', 'Other'] });
+    assert.deepEqual(store.allTags(), ['demo', 'other']);
+  });
+
+  it('clamps title and content length', () => {
+    const { TITLE_MAX, CONTENT_MAX } = require('../main/store');
+    const note = store.createNote({
+      title: 'x'.repeat(TITLE_MAX + 50),
+      content: 'y'.repeat(CONTENT_MAX + 10)
+    });
+    assert.equal(note.title.length, TITLE_MAX);
+    assert.equal(note.content.length, CONTENT_MAX);
+  });
+});

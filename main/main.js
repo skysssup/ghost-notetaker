@@ -1,9 +1,16 @@
 'use strict';
 
 const path = require('path');
-const { app, ipcMain, dialog, clipboard, screen, Menu, BrowserWindow } = require('electron');
+const { app, ipcMain, dialog, clipboard, screen, Menu, BrowserWindow, shell } = require('electron');
 
 const { Store, NOTE_COLORS, TEMPLATES } = require('./store');
+const {
+  requireId,
+  sanitizeNotePatch,
+  sanitizeCreateOptions,
+  sanitizeSettingsPatch,
+  sanitizeIdList
+} = require('./ipc-guards');
 const {
   hideDockIcon,
   isMac,
@@ -148,47 +155,65 @@ function registerIpc() {
     };
   });
 
-  ipcMain.handle('notes:list', (_e, filter) => store.listNotes(filter || {}));
-  ipcMain.handle('notes:get', (_e, id) => store.getNote(id));
-  ipcMain.handle('notes:tags', (_e, workspaceId) => store.allTags(workspaceId));
-  ipcMain.handle('notes:recent', (_e, limit) => store.recentNotes(limit || 8));
+  ipcMain.handle('notes:list', (_e, filter) => {
+    const f = filter && typeof filter === 'object' ? filter : {};
+    const safe = {};
+    if (typeof f.workspaceId === 'string') safe.workspaceId = f.workspaceId;
+    if (typeof f.tag === 'string') safe.tag = f.tag.slice(0, 64);
+    if (typeof f.query === 'string') safe.query = f.query.slice(0, 200);
+    if (f.visible === true || f.visible === false) safe.visible = f.visible;
+    if (typeof f.sortBy === 'string') safe.sortBy = f.sortBy;
+    return store.listNotes(safe);
+  });
+  ipcMain.handle('notes:get', (_e, id) => store.getNote(requireId(id, 'noteId')));
+  ipcMain.handle('notes:tags', (_e, workspaceId) =>
+    store.allTags(typeof workspaceId === 'string' ? workspaceId : undefined)
+  );
+  ipcMain.handle('notes:recent', (_e, limit) => {
+    const n = Number(limit);
+    return store.recentNotes(Number.isFinite(n) ? Math.min(24, Math.max(1, n)) : 8);
+  });
 
   ipcMain.handle('notes:create', async (_e, options) => {
-    const note = await createNote(options || {});
+    const note = await createNote(sanitizeCreateOptions(options));
     return note;
   });
 
   ipcMain.handle('notes:update', (_e, id, patch) => {
-    const note = store.updateNote(id, patch || {});
+    const noteId = requireId(id, 'noteId');
+    const note = store.updateNote(noteId, sanitizeNotePatch(patch));
     if (note) {
-      notes.applyNoteAppearance(id);
+      notes.applyNoteAppearance(noteId);
       refreshManagerAndTray();
     }
     return note;
   });
 
   ipcMain.handle('notes:hide', (_e, id) => {
-    notes.hide(id);
+    const noteId = requireId(id, 'noteId');
+    notes.hide(noteId);
     refreshManagerAndTray();
     return true;
   });
 
   ipcMain.handle('notes:open', async (_e, id) => {
-    store.updateNote(id, { visible: true });
-    await notes.open(id);
+    const noteId = requireId(id, 'noteId');
+    store.updateNote(noteId, { visible: true });
+    await notes.open(noteId);
     refreshManagerAndTray();
-    return store.getNote(id);
+    return store.getNote(noteId);
   });
 
   ipcMain.handle('notes:delete', async (_e, id) => {
-    notes.closeAndDestroy(id);
-    const ok = store.deleteNote(id);
+    const noteId = requireId(id, 'noteId');
+    notes.closeAndDestroy(noteId);
+    const ok = store.deleteNote(noteId);
     refreshManagerAndTray();
     return ok;
   });
 
   ipcMain.handle('notes:duplicate', async (_e, id) => {
-    const note = store.duplicateNote(id);
+    const note = store.duplicateNote(requireId(id, 'noteId'));
     if (note) {
       await notes.open(note.id);
       refreshManagerAndTray();
@@ -197,9 +222,10 @@ function registerIpc() {
   });
 
   ipcMain.handle('notes:bulkVisible', async (_e, ids, visible) => {
-    const list = Array.isArray(ids) ? ids : [];
+    const list = sanitizeIdList(ids);
+    const show = Boolean(visible);
     for (const id of list) {
-      if (visible) {
+      if (show) {
         store.updateNote(id, { visible: true });
         await notes.open(id);
       } else {
@@ -211,9 +237,10 @@ function registerIpc() {
   });
 
   ipcMain.handle('notes:exportMarkdown', async (_e, id) => {
-    const md = store.noteToMarkdown(id);
+    const noteId = requireId(id, 'noteId');
+    const md = store.noteToMarkdown(noteId);
     if (!md) return null;
-    const note = store.getNote(id);
+    const note = store.getNote(noteId);
     const { filePath, canceled } = await dialog.showSaveDialog({
       title: 'Export note as Markdown',
       defaultPath: `${(note && note.title) || 'note'}.md`,
@@ -225,14 +252,16 @@ function registerIpc() {
   });
 
   ipcMain.handle('notes:setClickThrough', (_e, id, enabled) => {
-    const note = store.updateNote(id, { clickThrough: Boolean(enabled) });
-    if (note) notes.applyNoteAppearance(id);
+    const noteId = requireId(id, 'noteId');
+    const note = store.updateNote(noteId, { clickThrough: Boolean(enabled) });
+    if (note) notes.applyNoteAppearance(noteId);
     return note;
   });
 
   ipcMain.handle('notes:chromeHover', (_e, id, hovering) => {
-    const win = notes.get(id);
-    const note = store.getNote(id);
+    const noteId = requireId(id, 'noteId');
+    const win = notes.get(noteId);
+    const note = store.getNote(noteId);
     if (!win || !note) return;
     const global = store.getSettings().globalClickThrough;
     const shouldIgnore = (global || note.clickThrough) && !hovering;
@@ -243,22 +272,22 @@ function registerIpc() {
   ipcMain.handle('workspaces:list', () => store.listWorkspaces());
   ipcMain.handle('workspaces:active', () => store.getActiveWorkspaceId());
   ipcMain.handle('workspaces:setActive', (_e, id) => {
-    const result = store.setActiveWorkspace(id);
+    const result = store.setActiveWorkspace(requireId(id, 'workspaceId'));
     refreshManagerAndTray();
     return result;
   });
   ipcMain.handle('workspaces:create', (_e, name) => {
-    const ws = store.createWorkspace(name);
+    const ws = store.createWorkspace(String(name || '').slice(0, 80));
     refreshManagerAndTray();
     return ws;
   });
   ipcMain.handle('workspaces:rename', (_e, id, name) => {
-    const ws = store.renameWorkspace(id, name);
+    const ws = store.renameWorkspace(requireId(id, 'workspaceId'), String(name || '').slice(0, 80));
     refreshManagerAndTray();
     return ws;
   });
   ipcMain.handle('workspaces:delete', (_e, id) => {
-    const ok = store.deleteWorkspace(id);
+    const ok = store.deleteWorkspace(requireId(id, 'workspaceId'));
     for (const n of [...notes.listOpenIds()]) {
       if (!store.getNote(n)) notes.closeAndDestroy(n);
     }
@@ -279,6 +308,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('data:importAll', async (_e, mode) => {
+    const importMode = mode === 'replace' ? 'replace' : 'merge';
     const { filePaths, canceled } = await dialog.showOpenDialog({
       title: 'Import notes',
       filters: [{ name: 'JSON', extensions: ['json'] }],
@@ -286,8 +316,8 @@ function registerIpc() {
     });
     if (canceled || !filePaths || !filePaths[0]) return null;
     const raw = JSON.parse(require('fs').readFileSync(filePaths[0], 'utf8'));
-    const result = store.importAll(raw, mode === 'replace' ? 'replace' : 'merge');
-    if (mode === 'replace') {
+    const result = store.importAll(raw, importMode);
+    if (importMode === 'replace') {
       notes.destroyAll();
       await notes.openVisibleNotes();
     }
@@ -297,16 +327,16 @@ function registerIpc() {
 
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:update', (_e, patch) => {
-    const prev = store.getSettings();
-    const s = store.updateSettings(patch || {});
-    if (patch && patch.shortcuts) shortcuts.registerGlobal();
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'contentProtection')) {
+    const safe = sanitizeSettingsPatch(patch);
+    const s = store.updateSettings(safe);
+    if (safe.shortcuts) shortcuts.registerGlobal();
+    if (Object.prototype.hasOwnProperty.call(safe, 'contentProtection')) {
       notes.reapplyContentProtection();
     }
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'launchAtLogin')) {
+    if (Object.prototype.hasOwnProperty.call(safe, 'launchAtLogin')) {
       syncLoginItem(s.launchAtLogin);
     }
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'globalClickThrough')) {
+    if (Object.prototype.hasOwnProperty.call(safe, 'globalClickThrough')) {
       notes.setGlobalClickThrough(s.globalClickThrough);
     }
     refreshManagerAndTray();
@@ -314,6 +344,19 @@ function registerIpc() {
   });
 
   ipcMain.handle('shortcuts:list', () => shortcuts.listDefinitions());
+
+  ipcMain.handle('shell:openExternal', async (_e, url) => {
+    if (typeof url !== 'string' || url.length > 2048) return false;
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return false;
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    await shell.openExternal(parsed.toString());
+    return true;
+  });
 
   ipcMain.handle('app:quit', () => {
     quitting = true;

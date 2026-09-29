@@ -168,6 +168,20 @@ describe('Store persistence', () => {
     assert.equal(store2.getNote(note.id).content, 'data');
   });
 
+
+  it('duplicates a note with offset bounds', () => {
+    const store = new Store(file);
+    store.load();
+    const note = store.createNote({ title: 'Orig', content: 'body', tags: ['a'] });
+    const copy = store.duplicateNote(note.id);
+    assert.ok(copy);
+    assert.notEqual(copy.id, note.id);
+    assert.match(copy.title, /\(copy\)/);
+    assert.equal(copy.content, 'body');
+    assert.deepEqual(copy.tags, ['a']);
+    assert.equal(copy.bounds.x, note.bounds.x + 28);
+  });
+
   it('createNoteRecord defaults', () => {
     const n = createNoteRecord({ workspaceId: 'ws' });
     assert.equal(n.pinned, true);

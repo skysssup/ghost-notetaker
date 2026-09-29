@@ -83,6 +83,18 @@ const TEMPLATES = {
       '## Done',
       '- [x] Example completed item'
     ].join('\n')
+  },
+  scratch: {
+    id: 'scratch',
+    label: 'Scratch pad',
+    title: 'Scratch',
+    content: [
+      '# Scratch',
+      '',
+      '- Idea:',
+      '- Link:',
+      '- Follow-up:'
+    ].join('\n')
   }
 };
 
@@ -519,6 +531,36 @@ class Store {
     }
     this.saveDeferred();
     return { imported, mode: 'merge' };
+  }
+
+
+  duplicateNote(id) {
+    const src = this.getNote(id);
+    if (!src) return null;
+    const note = createNoteRecord({
+      workspaceId: src.workspaceId,
+      title: `${src.title || 'Untitled'} (copy)`,
+      content: src.content,
+      tags: src.tags.slice(),
+      color: src.color,
+      opacity: src.opacity,
+      fontSize: src.fontSize,
+      monospace: src.monospace,
+      pinned: src.pinned,
+      clickThrough: false,
+      previewMode: false,
+      visible: true,
+      bounds: {
+        x: (src.bounds.x || 0) + 28,
+        y: (src.bounds.y || 0) + 28,
+        width: src.bounds.width,
+        height: src.bounds.height
+      },
+      displayId: src.displayId
+    });
+    this.state.notes.push(note);
+    this.saveDeferred();
+    return note;
   }
 
   noteToMarkdown(id) {

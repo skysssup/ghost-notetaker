@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('ghostManager', {
   openNote: (id) => ipcRenderer.invoke('notes:open', id),
   hideNote: (id) => ipcRenderer.invoke('notes:hide', id),
   deleteNote: (id) => ipcRenderer.invoke('notes:delete', id),
+  duplicateNote: (id) => ipcRenderer.invoke('notes:duplicate', id),
   exportMarkdown: (id) => ipcRenderer.invoke('notes:exportMarkdown', id),
   listWorkspaces: () => ipcRenderer.invoke('workspaces:list'),
   setActiveWorkspace: (id) => ipcRenderer.invoke('workspaces:setActive', id),

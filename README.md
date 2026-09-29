@@ -1,12 +1,8 @@
 # Ghost Notetaker
 
-Translucent sticky notes that float on top of everything but stay **invisible to screen sharing and recording** (Zoom, Google Meet, Microsoft Teams, QuickTime, OBS, native screen recording).
+Translucent sticky notes that float on top of everything but stay **invisible to screen sharing and recording** (Zoom, Meet, Teams, QuickTime, OBS, and the OS recorder).
 
-Private. Local. No accounts. No telemetry on note content.
-
-## How it works
-
-Each note is a frameless, transparent Electron window with `setContentProtection(true)`. The OS excludes that window from screen capture while you still see it normally.
+Private and local — no accounts, no cloud sync of note content.
 
 ## Run
 
@@ -15,18 +11,41 @@ npm install
 npm start
 ```
 
-The app lives in the **menu bar / system tray** (no Dock icon on macOS).
+Lives in the **menu bar / system tray** (no Dock icon on macOS). Single-instance.
 
-## Usage
+## Features
 
-- **New note:** `Cmd/Ctrl+Shift+N` (tray → New Note)
-- **Notes Manager:** `Cmd/Ctrl+Shift+M` — search, tags, workspaces, open/hide/rename/delete
-- **Hide / show all:** `Cmd/Ctrl+Shift+H`
-- **Click-through (ghost mode):** `Cmd/Ctrl+Shift+G` or the 👻 icon on a note
-- **Recovery when everything is hidden:** `Cmd/Ctrl+Alt+Shift+N`
-- Closing a note **hides** it; permanent delete is only from the Notes Manager
+- Create / edit / hide / delete notes
+- Pin always-on-top, opacity, colors, font size, monospace
+- Content protection (`setContentProtection`) so notes stay off screen share
+- Click-through (ghost mode) with chrome hover to re-enable controls
+- Workspaces, tags, search
+- Markdown edit + preview (checkboxes toggle in preview)
+- Templates: blank, meeting, demo talking points, todo, scratch
+- Global keyboard shortcuts + recovery shortcut when everything is hidden
+- Export / import JSON backups; per-note Markdown export
+- Multi-monitor aware (re-clamps when displays change)
+- Persistence of position, size, and content
 
-Notes auto-save locally (position, size, color, opacity, markdown content). Export/import JSON backups from the manager.
+## Shortcuts
+
+| Action | Default |
+| --- | --- |
+| New note | `Cmd/Ctrl+Shift+N` |
+| Notes Manager | `Cmd/Ctrl+Shift+M` |
+| Hide / show all | `Cmd/Ctrl+Shift+H` |
+| Click-through | `Cmd/Ctrl+Shift+G` |
+| Markdown preview (focused note) | `Cmd/Ctrl+Shift+P` |
+| Quick capture (clipboard) | `Cmd/Ctrl+Shift+Q` |
+| Recovery new note (global) | `Cmd/Ctrl+Alt+Shift+N` |
+
+Closing a note **hides** it. Permanent delete is only from the Notes Manager.
+
+## Tests
+
+```bash
+npm test
+```
 
 ## Platform notes
 
@@ -34,12 +53,6 @@ Notes auto-save locally (position, size, color, opacity, markdown content). Expo
 | --- | --- | --- |
 | Screen-capture exclusion | Generally reliable | Needs Windows 10 build 19041+ |
 | Over fullscreen apps | Visible on all Spaces | Always-on-top only |
-
-## Tests
-
-```bash
-npm test
-```
 
 ## License
 

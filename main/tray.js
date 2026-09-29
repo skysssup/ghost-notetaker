@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { Tray, Menu, nativeImage } = require('electron');
 const { isMac, acceleratorLabel } = require('./platform');
+const { TEMPLATES } = require('./store');
 
 const TINY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANElEQVQ4T2NkYGD4z0ABYBzVMKoBBgYGBhBmZGRk/A8CDAwMjP8ZGRn/jwIYGBj+MzIy/h8FMDAwMAAAtW4E/0bV7y8AAAAASUVORK5CYII=';
@@ -25,11 +26,20 @@ function buildTrayMenu(api) {
   const clickThrough = settings.globalClickThrough;
   const shortcuts = settings.shortcuts || {};
 
+  const templateItems = Object.values(TEMPLATES).map((t) => ({
+    label: t.label,
+    click: () => api.newNoteFromTemplate(t.id)
+  }));
+
   return Menu.buildFromTemplate([
     {
       label: 'New Note',
       accelerator: shortcuts.newNote,
       click: () => api.newNote()
+    },
+    {
+      label: 'New from Template',
+      submenu: templateItems
     },
     {
       label: 'Quick Capture (clipboard)',

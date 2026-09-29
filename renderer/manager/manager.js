@@ -241,6 +241,21 @@
       tagsBtn.textContent = 'Tags';
       tagsBtn.addEventListener('click', () => promptTags(note));
 
+      const dupBtn = document.createElement('button');
+      dupBtn.type = 'button';
+      dupBtn.className = 'ghost-btn';
+      dupBtn.textContent = 'Duplicate';
+      dupBtn.addEventListener('click', async () => {
+        await api.duplicateNote(note.id);
+        await reload();
+      });
+
+      const moveBtn = document.createElement('button');
+      moveBtn.type = 'button';
+      moveBtn.className = 'ghost-btn';
+      moveBtn.textContent = 'Move';
+      moveBtn.addEventListener('click', () => promptMoveNote(note));
+
       const mdBtn = document.createElement('button');
       mdBtn.type = 'button';
       mdBtn.className = 'ghost-btn';
@@ -253,7 +268,7 @@
       delBtn.textContent = 'Delete';
       delBtn.addEventListener('click', () => confirmDeleteNote(note));
 
-      actions.append(openBtn, hideBtn, renameBtn, tagsBtn, mdBtn, delBtn);
+      actions.append(openBtn, hideBtn, renameBtn, tagsBtn, dupBtn, moveBtn, mdBtn, delBtn);
       card.append(swatch, body, actions);
       els.noteList.appendChild(card);
     });
@@ -306,6 +321,33 @@
       ]
     });
     document.getElementById('mTags').value = (note.tags || []).join(', ');
+  }
+
+
+  function promptMoveNote(note) {
+    const options = state.workspaces
+      .map(
+        (ws) =>
+          `<option value="${escapeHtml(ws.id)}" ${ws.id === note.workspaceId ? 'selected' : ''}>${escapeHtml(ws.name)}</option>`
+      )
+      .join('');
+    openModal({
+      title: 'Move to workspace',
+      bodyHtml: `<div class="field"><label>Workspace</label><select id="mMoveWs">${options}</select></div>`,
+      footerButtons: [
+        { label: 'Cancel', onClick: closeModal },
+        {
+          label: 'Move',
+          primary: true,
+          onClick: async () => {
+            const workspaceId = document.getElementById('mMoveWs').value;
+            await api.updateNote(note.id, { workspaceId });
+            closeModal();
+            await reload();
+          }
+        }
+      ]
+    });
   }
 
   function confirmDeleteNote(note) {

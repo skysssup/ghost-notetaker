@@ -73,6 +73,7 @@ body {
 }
 
 .shell:hover .chrome,
+.shell:focus-within .chrome,
 .shell.chrome-pinned .chrome,
 .chrome:focus-within {
   opacity: 1;

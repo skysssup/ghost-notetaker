@@ -161,6 +161,15 @@ function registerIpc() {
     return ok;
   });
 
+  ipcMain.handle('notes:duplicate', async (_e, id) => {
+    const note = store.duplicateNote(id);
+    if (note) {
+      await notes.open(note.id);
+      refreshManagerAndTray();
+    }
+    return note;
+  });
+
   ipcMain.handle('notes:exportMarkdown', async (_e, id) => {
     const md = store.noteToMarkdown(id);
     if (!md) return null;
@@ -292,6 +301,7 @@ async function boot() {
   trayApi = createAppTray({
     getSettings: () => store.getSettings(),
     newNote: () => createNote(),
+    newNoteFromTemplate: (templateId) => createNote({ templateId }),
     quickCapture: () => quickCapture(),
     openManager: () => manager.open(),
     toggleClickThrough: () => {

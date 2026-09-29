@@ -77,6 +77,22 @@ function renderMarkdown(src) {
       continue;
     }
 
+    const quote = /^(\s*)>\s?(.*)$/.exec(line);
+    if (quote) {
+      flushList();
+      const parts = [quote[2]];
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i];
+        const cont = /^(\s*)>\s?(.*)$/.exec(next);
+        if (!cont) break;
+        parts.push(cont[2]);
+        i += 1;
+      }
+      out.push(`<blockquote>${parts.map(inlineFormat).join('<br/>')}</blockquote>`);
+      continue;
+    }
+
     const heading = /^(#{1,6})\s+(.*)$/.exec(line);
     if (heading) {
       flushList();
@@ -141,6 +157,7 @@ function renderMarkdown(src) {
       if (/^```/.test(next)) break;
       if (/^\s*[-*]\s+/.test(next)) break;
       if (/^\s*\d+\.\s+/.test(next)) break;
+      if (/^\s*>\s?/.test(next)) break;
       if (/^\s*---+\s*$/.test(next)) break;
       para.push(next);
       i += 1;

@@ -25,7 +25,7 @@
           />
         </div>
         <div class="chrome-right">
-          <button type="button" id="btnPreview" class="icon-btn" title="Toggle preview">◈</button>
+          <button type="button" id="btnPreview" class="icon-btn" title="Toggle preview (⌘⇧P)">◈</button>
           <button type="button" id="btnMono" class="icon-btn" title="Monospace">{}</button>
           <button type="button" id="btnPin" class="icon-btn" title="Pin always-on-top">📌</button>
           <button type="button" id="btnGhost" class="icon-btn" title="Click-through">👻</button>
@@ -43,6 +43,21 @@
           <button type="button" id="btnHide" class="icon-btn danger" title="Hide note">✕</button>
         </div>
       </header>
+
+      <div id="mdToolbar" class="md-toolbar" aria-label="Markdown toolbar">
+        <button type="button" data-md="h2" title="Heading">H</button>
+        <button type="button" data-md="bold" title="Bold"><strong>B</strong></button>
+        <button type="button" data-md="italic" title="Italic"><em>I</em></button>
+        <button type="button" data-md="code" title="Inline code">&lt;/&gt;</button>
+        <button type="button" data-md="link" title="Link">🔗</button>
+        <span class="md-sep"></span>
+        <button type="button" data-md="ul" title="Bullet list">•≡</button>
+        <button type="button" data-md="ol" title="Numbered list">1.</button>
+        <button type="button" data-md="task" title="Checklist">☑</button>
+        <button type="button" data-md="quote" title="Quote">❝</button>
+        <button type="button" data-md="hr" title="Divider">―</button>
+      </div>
+
       <main class="body">
         <textarea
           id="editor"
@@ -52,8 +67,19 @@
         ></textarea>
         <div id="preview" class="preview hidden" aria-live="polite"></div>
       </main>
+
       <footer class="status">
-        <span id="tagLine" class="tag-line"></span>
+        <div class="tags-row">
+          <div id="tagChips" class="tag-chips"></div>
+          <input
+            id="tagInput"
+            class="tag-input"
+            type="text"
+            maxlength="32"
+            placeholder="+ tag"
+            spellcheck="false"
+          />
+        </div>
         <span id="modeLabel" class="mode-label">edit</span>
       </footer>
     </div>

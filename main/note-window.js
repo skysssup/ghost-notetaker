@@ -29,12 +29,18 @@ class NoteWindowController {
     return Array.from(this.windows.keys());
   }
 
+  _contentProtectionEnabled() {
+    const s = this.store.getSettings();
+    return s.contentProtection !== false;
+  }
+
   async open(noteId) {
     const existing = this.windows.get(noteId);
     if (existing && !existing.isDestroyed()) {
-      applyContentProtection(existing);
+      applyContentProtection(existing, this._contentProtectionEnabled());
       if (!existing.isVisible()) existing.show();
       existing.focus();
+      this.store.touchRecent(noteId);
       return existing;
     }
 
@@ -64,7 +70,7 @@ class NoteWindowController {
     const win = new BrowserWindow(opts);
     this.windows.set(noteId, win);
 
-    applyContentProtection(win);
+    applyContentProtection(win, this._contentProtectionEnabled());
     applyAlwaysOnTop(win, note.pinned);
     win.setOpacity(1);
 
@@ -75,7 +81,7 @@ class NoteWindowController {
     this.attachShortcuts(win);
 
     win.once('ready-to-show', () => {
-      applyContentProtection(win);
+      applyContentProtection(win, this._contentProtectionEnabled());
       const fresh = this.store.getNote(noteId);
       if (fresh) {
         applyAlwaysOnTop(win, fresh.pinned);
@@ -83,11 +89,12 @@ class NoteWindowController {
       }
       win.show();
       this.store.updateNote(noteId, { visible: true });
+      this.store.touchRecent(noteId);
       this.onChanged();
     });
 
     win.on('show', () => {
-      if (isWin()) applyContentProtection(win);
+      if (isWin()) applyContentProtection(win, this._contentProtectionEnabled());
     });
 
     win.on('hide', () => {
@@ -225,6 +232,13 @@ class NoteWindowController {
   broadcast(channel, payload) {
     for (const win of this.windows.values()) {
       if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+  }
+
+  reapplyContentProtection() {
+    const enabled = this._contentProtectionEnabled();
+    for (const win of this.windows.values()) {
+      if (!win.isDestroyed()) applyContentProtection(win, enabled);
     }
   }
 

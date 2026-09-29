@@ -4,8 +4,13 @@ const path = require('path');
 const { app, ipcMain, dialog, clipboard, screen, Menu, BrowserWindow } = require('electron');
 
 const { Store, NOTE_COLORS, TEMPLATES } = require('./store');
-const { hideDockIcon, isMac } = require('./platform');
-const { cursorNearbyBounds, clampBoundsToDisplays } = require('./display');
+const {
+  hideDockIcon,
+  isMac,
+  applyLaunchAtLogin,
+  getLaunchAtLogin
+} = require('./platform');
+const { cursorNearbyBounds } = require('./display');
 const { ShortcutController } = require('./shortcuts');
 const { NoteWindowController } = require('./note-window');
 const { ManagerWindowController } = require('./manager-window');
@@ -34,6 +39,10 @@ function storePath() {
 function refreshManagerAndTray() {
   if (manager) manager.refresh();
   if (trayApi) trayApi.rebuild();
+}
+
+function syncLoginItem(enabled) {
+  applyLaunchAtLogin(Boolean(enabled));
 }
 
 async function createNote(options = {}) {
@@ -66,6 +75,20 @@ async function quickCapture() {
     content: text,
     templateId: 'blank'
   });
+}
+
+async function hideAllNotes() {
+  notes.hideAll();
+  refreshManagerAndTray();
+}
+
+async function showAllNotes() {
+  const list = store.listNotes({ workspaceId: store.getActiveWorkspaceId() });
+  for (const n of list) {
+    store.updateNote(n.id, { visible: true });
+    await notes.open(n.id);
+  }
+  refreshManagerAndTray();
 }
 
 function handleShortcutAction(action) {
@@ -119,13 +142,16 @@ function registerIpc() {
       settings: store.getSettings(),
       workspaces: store.listWorkspaces(),
       activeWorkspaceId: store.getActiveWorkspaceId(),
-      platform: process.platform
+      platform: process.platform,
+      version: app.getVersion(),
+      launchAtLoginSupported: typeof app.setLoginItemSettings === 'function'
     };
   });
 
   ipcMain.handle('notes:list', (_e, filter) => store.listNotes(filter || {}));
   ipcMain.handle('notes:get', (_e, id) => store.getNote(id));
   ipcMain.handle('notes:tags', (_e, workspaceId) => store.allTags(workspaceId));
+  ipcMain.handle('notes:recent', (_e, limit) => store.recentNotes(limit || 8));
 
   ipcMain.handle('notes:create', async (_e, options) => {
     const note = await createNote(options || {});
@@ -168,6 +194,20 @@ function registerIpc() {
       refreshManagerAndTray();
     }
     return note;
+  });
+
+  ipcMain.handle('notes:bulkVisible', async (_e, ids, visible) => {
+    const list = Array.isArray(ids) ? ids : [];
+    for (const id of list) {
+      if (visible) {
+        store.updateNote(id, { visible: true });
+        await notes.open(id);
+      } else {
+        notes.hide(id);
+      }
+    }
+    refreshManagerAndTray();
+    return list.length;
   });
 
   ipcMain.handle('notes:exportMarkdown', async (_e, id) => {
@@ -219,7 +259,6 @@ function registerIpc() {
   });
   ipcMain.handle('workspaces:delete', (_e, id) => {
     const ok = store.deleteWorkspace(id);
-    // Close windows for deleted notes
     for (const n of [...notes.listOpenIds()]) {
       if (!store.getNote(n)) notes.closeAndDestroy(n);
     }
@@ -258,8 +297,18 @@ function registerIpc() {
 
   ipcMain.handle('settings:get', () => store.getSettings());
   ipcMain.handle('settings:update', (_e, patch) => {
+    const prev = store.getSettings();
     const s = store.updateSettings(patch || {});
     if (patch && patch.shortcuts) shortcuts.registerGlobal();
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'contentProtection')) {
+      notes.reapplyContentProtection();
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'launchAtLogin')) {
+      syncLoginItem(s.launchAtLogin);
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'globalClickThrough')) {
+      notes.setGlobalClickThrough(s.globalClickThrough);
+    }
     refreshManagerAndTray();
     return s;
   });
@@ -272,7 +321,7 @@ function registerIpc() {
   });
 
   ipcMain.on('note:drag-start', () => {
-    /* reserved for future drag affordances */
+    /* reserved */
   });
 }
 
@@ -281,6 +330,15 @@ async function boot() {
 
   store = new Store(storePath());
   store.load();
+
+  // Reconcile launch-at-login with OS
+  const settings = store.getSettings();
+  if (settings.launchAtLogin) {
+    syncLoginItem(true);
+  } else if (getLaunchAtLogin()) {
+    // Keep store in sync if OS already has it enabled from a prior install
+    store.updateSettings({ launchAtLogin: true });
+  }
 
   notes = new NoteWindowController({
     store,
@@ -300,15 +358,39 @@ async function boot() {
 
   trayApi = createAppTray({
     getSettings: () => store.getSettings(),
+    getRecentNotes: () => store.recentNotes(8),
+    getWorkspaces: () => store.listWorkspaces(),
+    getActiveWorkspaceId: () => store.getActiveWorkspaceId(),
+    setActiveWorkspace: (id) => {
+      store.setActiveWorkspace(id);
+      refreshManagerAndTray();
+    },
     newNote: () => createNote(),
     newNoteFromTemplate: (templateId) => createNote({ templateId }),
     quickCapture: () => quickCapture(),
+    openNote: async (id) => {
+      store.updateNote(id, { visible: true });
+      await notes.open(id);
+      refreshManagerAndTray();
+    },
     openManager: () => manager.open(),
+    openSettings: () => {
+      manager.open();
+      setTimeout(() => manager.send('manager:showSettings'), 200);
+    },
     toggleClickThrough: () => {
       notes.toggleGlobalClickThrough();
       refreshManagerAndTray();
     },
     toggleHideShow: () => notes.toggleHideShowAll().then(() => refreshManagerAndTray()),
+    hideAll: () => hideAllNotes(),
+    showAll: () => showAllNotes(),
+    toggleContentProtection: () => {
+      const cur = store.getSettings().contentProtection !== false;
+      store.updateSettings({ contentProtection: !cur });
+      notes.reapplyContentProtection();
+      refreshManagerAndTray();
+    },
     openShortcuts: () => {
       manager.open();
       setTimeout(() => manager.send('manager:showShortcuts'), 200);
@@ -336,16 +418,19 @@ async function boot() {
           'Translucent notes that stay **invisible** to screen sharing.',
           '',
           '- Hover the top edge to reveal controls',
+          '- Use the markdown toolbar for headings, bold, lists, and checklists',
           '- Toggle markdown preview with the eye icon',
-          '- Open the **Notes Manager** from the tray',
-          '- Try a template when creating a note',
+          '- Add tags in the footer chips',
+          '- Open **Notes Manager** from the tray for workspaces & settings',
           '',
           '## Checklist',
           '- [ ] Create a meeting note',
           '- [ ] Add a tag',
+          '- [ ] Open Preferences',
           '- [ ] Export a backup',
           ''
-        ].join('\n')
+        ].join('\n'),
+        tags: ['welcome']
       });
       notes.applyNoteAppearance(welcome.id);
     }
@@ -353,7 +438,6 @@ async function boot() {
     await notes.openVisibleNotes();
   }
 
-  // Empty application menu so accelerators don't conflict oddly on Linux
   if (!isMac()) {
     Menu.setApplicationMenu(null);
   }
@@ -377,11 +461,8 @@ app.on('before-quit', () => {
   }
 });
 
-app.on('window-all-closed', (e) => {
-  // Tray app — stay alive
-  if (!quitting) {
-    /* keep running */
-  }
+app.on('window-all-closed', () => {
+  /* tray app — stay alive */
 });
 
 app.on('activate', () => {

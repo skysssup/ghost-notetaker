@@ -42,8 +42,8 @@ function noteWindowOptions(bounds) {
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    minWidth: 200,
-    minHeight: 160,
+    minWidth: 220,
+    minHeight: 180,
     frame: false,
     transparent: true,
     resizable: true,
@@ -53,7 +53,7 @@ function noteWindowOptions(bounds) {
     focusable: true,
     fullscreenable: false,
     webPreferences: {
-      preload: null, // set by caller
+      preload: null,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -94,10 +94,10 @@ function applyAlwaysOnTop(win, pinned) {
   }
 }
 
-function applyContentProtection(win) {
+function applyContentProtection(win, enabled = true) {
   if (!win || win.isDestroyed()) return;
   try {
-    win.setContentProtection(true);
+    win.setContentProtection(Boolean(enabled));
   } catch (_) {
     /* older Electron / platform */
   }
@@ -116,6 +116,32 @@ function applyClickThrough(win, enabled, forward = true) {
   }
 }
 
+function applyLaunchAtLogin(enabled) {
+  try {
+    if (typeof app.setLoginItemSettings === 'function') {
+      app.setLoginItemSettings({
+        openAtLogin: Boolean(enabled),
+        openAsHidden: true
+      });
+      return true;
+    }
+  } catch (_) {
+    /* unsupported */
+  }
+  return false;
+}
+
+function getLaunchAtLogin() {
+  try {
+    if (typeof app.getLoginItemSettings === 'function') {
+      return Boolean(app.getLoginItemSettings().openAtLogin);
+    }
+  } catch (_) {
+    /* unsupported */
+  }
+  return false;
+}
+
 module.exports = {
   isMac,
   isWin,
@@ -125,5 +151,7 @@ module.exports = {
   noteWindowOptions,
   applyAlwaysOnTop,
   applyContentProtection,
-  applyClickThrough
+  applyClickThrough,
+  applyLaunchAtLogin,
+  getLaunchAtLogin
 };

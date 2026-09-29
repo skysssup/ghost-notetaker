@@ -42,12 +42,12 @@ class ManagerWindowController {
       }
     }
 
-    applyContentProtection(this.win);
+    applyContentProtection(this.win, true);
     this.win.loadFile(path.join(__dirname, '..', 'renderer', 'manager', 'manager.html'));
     this.attachShortcuts(this.win);
 
     this.win.once('ready-to-show', () => {
-      applyContentProtection(this.win);
+      applyContentProtection(this.win, true);
       this.win.show();
     });
 

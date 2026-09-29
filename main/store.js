@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const STORE_VERSION = 1;
+const STORE_VERSION = 2;
 
 const NOTE_COLORS = [
   { id: 'mist', hex: '#c8d6e5', label: 'Mist' },
@@ -14,7 +14,11 @@ const NOTE_COLORS = [
   { id: 'rose', hex: '#fd79a8', label: 'Rose' },
   { id: 'sky', hex: '#74b9ff', label: 'Sky' },
   { id: 'slate', hex: '#636e72', label: 'Slate' },
-  { id: 'ivory', hex: '#f5f6fa', label: 'Ivory' }
+  { id: 'ivory', hex: '#f5f6fa', label: 'Ivory' },
+  { id: 'amber', hex: '#f59e0b', label: 'Amber' },
+  { id: 'coral', hex: '#ff7675', label: 'Coral' },
+  { id: 'teal', hex: '#14b8a6', label: 'Teal' },
+  { id: 'indigo', hex: '#818cf8', label: 'Indigo' }
 ];
 
 const TEMPLATES = {
@@ -95,6 +99,45 @@ const TEMPLATES = {
       '- Link:',
       '- Follow-up:'
     ].join('\n')
+  },
+  daily: {
+    id: 'daily',
+    label: 'Daily standup',
+    title: 'Daily standup',
+    content: [
+      '# Standup',
+      '',
+      '**Date:** ',
+      '',
+      '## Yesterday',
+      '- ',
+      '',
+      '## Today',
+      '- [ ] ',
+      '',
+      '## Blockers',
+      '- '
+    ].join('\n')
+  },
+  decision: {
+    id: 'decision',
+    label: 'Decision log',
+    title: 'Decision',
+    content: [
+      '# Decision',
+      '',
+      '**Context:** ',
+      '**Options considered:** ',
+      '',
+      '## Decision',
+      '',
+      '',
+      '## Why',
+      '- ',
+      '',
+      '## Follow-ups',
+      '- [ ] '
+    ].join('\n')
   }
 };
 
@@ -116,20 +159,6 @@ function defaultWorkspace() {
   };
 }
 
-function emptyState() {
-  const ws = defaultWorkspace();
-  return {
-    version: STORE_VERSION,
-    activeWorkspaceId: ws.id,
-    workspaces: [ws],
-    notes: [],
-    settings: {
-      globalClickThrough: false,
-      shortcuts: defaultShortcuts()
-    }
-  };
-}
-
 function defaultShortcuts() {
   return {
     newNote: 'CommandOrControl+Shift+N',
@@ -142,22 +171,57 @@ function defaultShortcuts() {
   };
 }
 
-function defaultNoteBounds() {
-  return { x: 120, y: 120, width: 340, height: 280 };
+function defaultSettings() {
+  return {
+    globalClickThrough: false,
+    contentProtection: true,
+    launchAtLogin: false,
+    defaultOpacity: 0.88,
+    defaultFontSize: 14,
+    defaultColor: 'mist',
+    defaultMonospace: false,
+    sortBy: 'updated',
+    recentNoteIds: [],
+    shortcuts: defaultShortcuts()
+  };
 }
 
-function createNoteRecord(partial = {}) {
+function emptyState() {
+  const ws = defaultWorkspace();
+  return {
+    version: STORE_VERSION,
+    activeWorkspaceId: ws.id,
+    workspaces: [ws],
+    notes: [],
+    settings: defaultSettings()
+  };
+}
+
+function defaultNoteBounds() {
+  return { x: 120, y: 120, width: 360, height: 300 };
+}
+
+function createNoteRecord(partial = {}, settings = null) {
   const stamp = nowIso();
+  const defaults = settings || defaultSettings();
   return {
     id: partial.id || createId('note'),
     workspaceId: partial.workspaceId,
     title: partial.title != null ? String(partial.title) : 'Untitled',
     content: partial.content != null ? String(partial.content) : '',
     tags: Array.isArray(partial.tags) ? partial.tags.map(String) : [],
-    color: partial.color || 'mist',
-    opacity: clamp(partial.opacity != null ? Number(partial.opacity) : 0.88, 0.25, 1),
-    fontSize: clamp(partial.fontSize != null ? Number(partial.fontSize) : 14, 10, 28),
-    monospace: Boolean(partial.monospace),
+    color: partial.color || defaults.defaultColor || 'mist',
+    opacity: clamp(
+      partial.opacity != null ? Number(partial.opacity) : defaults.defaultOpacity,
+      0.25,
+      1
+    ),
+    fontSize: clamp(
+      partial.fontSize != null ? Number(partial.fontSize) : defaults.defaultFontSize,
+      10,
+      28
+    ),
+    monospace: partial.monospace != null ? Boolean(partial.monospace) : Boolean(defaults.defaultMonospace),
     pinned: partial.pinned !== false,
     clickThrough: Boolean(partial.clickThrough),
     previewMode: Boolean(partial.previewMode),
@@ -178,8 +242,8 @@ function normalizeBounds(b) {
   return {
     x: Math.round(Number(b.x) || 0),
     y: Math.round(Number(b.y) || 0),
-    width: Math.max(200, Math.round(Number(b.width) || 340)),
-    height: Math.max(160, Math.round(Number(b.height) || 280))
+    width: Math.max(200, Math.round(Number(b.width) || 360)),
+    height: Math.max(160, Math.round(Number(b.height) || 300))
   };
 }
 
@@ -199,27 +263,72 @@ function migrate(raw) {
       ? raw.activeWorkspaceId
       : state.workspaces[0].id;
 
+  const settings = {
+    ...defaultSettings(),
+    ...(raw.settings && typeof raw.settings === 'object' ? raw.settings : {})
+  };
+  settings.shortcuts = {
+    ...defaultShortcuts(),
+    ...(raw.settings && raw.settings.shortcuts ? raw.settings.shortcuts : {})
+  };
+  settings.recentNoteIds = Array.isArray(settings.recentNoteIds)
+    ? settings.recentNoteIds.map(String).slice(0, 12)
+    : [];
+  settings.defaultOpacity = clamp(Number(settings.defaultOpacity), 0.25, 1);
+  settings.defaultFontSize = clamp(Number(settings.defaultFontSize), 10, 28);
+  settings.contentProtection = settings.contentProtection !== false;
+  settings.launchAtLogin = Boolean(settings.launchAtLogin);
+  settings.globalClickThrough = Boolean(settings.globalClickThrough);
+  settings.defaultMonospace = Boolean(settings.defaultMonospace);
+  settings.sortBy = ['updated', 'created', 'title', 'color'].includes(settings.sortBy)
+    ? settings.sortBy
+    : 'updated';
+  if (!NOTE_COLORS.some((c) => c.id === settings.defaultColor)) {
+    settings.defaultColor = 'mist';
+  }
+  state.settings = settings;
+
   if (Array.isArray(raw.notes)) {
     state.notes = raw.notes.map((n) =>
-      createNoteRecord({
-        ...n,
-        workspaceId:
-          n.workspaceId && state.workspaces.some((w) => w.id === n.workspaceId)
-            ? n.workspaceId
-            : state.activeWorkspaceId
-      })
+      createNoteRecord(
+        {
+          ...n,
+          workspaceId:
+            n.workspaceId && state.workspaces.some((w) => w.id === n.workspaceId)
+              ? n.workspaceId
+              : state.activeWorkspaceId
+        },
+        settings
+      )
     );
   }
 
-  if (raw.settings && typeof raw.settings === 'object') {
-    state.settings.globalClickThrough = Boolean(raw.settings.globalClickThrough);
-    state.settings.shortcuts = {
-      ...defaultShortcuts(),
-      ...(raw.settings.shortcuts || {})
-    };
-  }
   state.version = STORE_VERSION;
   return state;
+}
+
+function sortNotes(notes, sortBy) {
+  const list = notes.slice();
+  switch (sortBy) {
+    case 'created':
+      list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+      break;
+    case 'title':
+      list.sort((a, b) =>
+        String(a.title || '').localeCompare(String(b.title || ''), undefined, {
+          sensitivity: 'base'
+        })
+      );
+      break;
+    case 'color':
+      list.sort((a, b) => String(a.color).localeCompare(String(b.color)));
+      break;
+    case 'updated':
+    default:
+      list.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      break;
+  }
+  return list;
 }
 
 class Store {
@@ -282,9 +391,50 @@ class Store {
   }
 
   updateSettings(patch) {
-    this.state.settings = { ...this.state.settings, ...patch };
+    const next = { ...this.state.settings, ...patch };
+    if (patch && patch.shortcuts) {
+      next.shortcuts = { ...defaultShortcuts(), ...this.state.settings.shortcuts, ...patch.shortcuts };
+    }
+    if (patch && patch.defaultOpacity != null) {
+      next.defaultOpacity = clamp(Number(patch.defaultOpacity), 0.25, 1);
+    }
+    if (patch && patch.defaultFontSize != null) {
+      next.defaultFontSize = clamp(Number(patch.defaultFontSize), 10, 28);
+    }
+    if (patch && patch.recentNoteIds) {
+      next.recentNoteIds = Array.isArray(patch.recentNoteIds)
+        ? patch.recentNoteIds.map(String).slice(0, 12)
+        : next.recentNoteIds;
+    }
+    if (patch && patch.sortBy) {
+      next.sortBy = ['updated', 'created', 'title', 'color'].includes(patch.sortBy)
+        ? patch.sortBy
+        : next.sortBy;
+    }
+    if (patch && patch.defaultColor && !NOTE_COLORS.some((c) => c.id === patch.defaultColor)) {
+      next.defaultColor = this.state.settings.defaultColor;
+    }
+    this.state.settings = next;
     this.saveDeferred();
     return this.state.settings;
+  }
+
+  touchRecent(noteId) {
+    if (!noteId) return;
+    const ids = [noteId, ...(this.state.settings.recentNoteIds || []).filter((id) => id !== noteId)];
+    this.state.settings.recentNoteIds = ids.slice(0, 12);
+    this.saveDeferred();
+  }
+
+  recentNotes(limit = 8) {
+    const ids = this.state.settings.recentNoteIds || [];
+    const out = [];
+    for (const id of ids) {
+      const n = this.getNote(id);
+      if (n) out.push(n);
+      if (out.length >= limit) break;
+    }
+    return out;
   }
 
   listWorkspaces() {
@@ -329,6 +479,9 @@ class Store {
     if (idx < 0) return false;
     this.state.workspaces.splice(idx, 1);
     this.state.notes = this.state.notes.filter((n) => n.workspaceId !== id);
+    this.state.settings.recentNoteIds = (this.state.settings.recentNoteIds || []).filter((nid) =>
+      this.state.notes.some((n) => n.id === nid)
+    );
     if (this.state.activeWorkspaceId === id) {
       this.state.activeWorkspaceId = this.state.workspaces[0].id;
     }
@@ -345,6 +498,8 @@ class Store {
       const tag = String(filter.tag).toLowerCase();
       notes = notes.filter((n) => n.tags.some((t) => t.toLowerCase() === tag));
     }
+    if (filter.visible === true) notes = notes.filter((n) => n.visible);
+    if (filter.visible === false) notes = notes.filter((n) => !n.visible);
     if (filter.query) {
       const q = String(filter.query).toLowerCase();
       notes = notes.filter(
@@ -354,8 +509,7 @@ class Store {
           n.tags.some((t) => t.toLowerCase().includes(q))
       );
     }
-    notes.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-    return notes;
+    return sortNotes(notes, filter.sortBy || this.state.settings.sortBy || 'updated');
   }
 
   getNote(id) {
@@ -375,20 +529,24 @@ class Store {
     const template = TEMPLATES[options.templateId] || TEMPLATES.blank;
     const workspaceId =
       options.workspaceId || this.state.activeWorkspaceId || this.state.workspaces[0].id;
-    const note = createNoteRecord({
-      workspaceId,
-      title: options.title != null ? options.title : template.title,
-      content: options.content != null ? options.content : template.content,
-      tags: options.tags || [],
-      color: options.color,
-      opacity: options.opacity,
-      fontSize: options.fontSize,
-      monospace: options.monospace,
-      bounds: options.bounds,
-      displayId: options.displayId,
-      visible: options.visible !== false
-    });
+    const note = createNoteRecord(
+      {
+        workspaceId,
+        title: options.title != null ? options.title : template.title,
+        content: options.content != null ? options.content : template.content,
+        tags: options.tags || [],
+        color: options.color,
+        opacity: options.opacity,
+        fontSize: options.fontSize,
+        monospace: options.monospace,
+        bounds: options.bounds,
+        displayId: options.displayId,
+        visible: options.visible !== false
+      },
+      this.state.settings
+    );
     this.state.notes.push(note);
+    this.touchRecent(note.id);
     this.saveDeferred();
     return note;
   }
@@ -431,6 +589,9 @@ class Store {
       }
     }
     note.updatedAt = nowIso();
+    if (patch.title != null || patch.content != null || patch.tags != null) {
+      this.touchRecent(id);
+    }
     this.saveDeferred();
     return note;
   }
@@ -439,6 +600,7 @@ class Store {
     const idx = this.state.notes.findIndex((n) => n.id === id);
     if (idx < 0) return false;
     this.state.notes.splice(idx, 1);
+    this.state.settings.recentNoteIds = (this.state.settings.recentNoteIds || []).filter((x) => x !== id);
     this.saveDeferred();
     return true;
   }
@@ -449,6 +611,17 @@ class Store {
 
   showNote(id) {
     return this.updateNote(id, { visible: true });
+  }
+
+  bulkSetVisible(ids, visible) {
+    let count = 0;
+    for (const id of ids || []) {
+      if (this.getNote(id)) {
+        this.updateNote(id, { visible: Boolean(visible) });
+        count += 1;
+      }
+    }
+    return count;
   }
 
   exportAll() {
@@ -519,12 +692,15 @@ class Store {
         });
       } else {
         this.state.notes.push(
-          createNoteRecord({
-            ...n,
-            workspaceId,
-            visible: false,
-            id: n.id || createId('note')
-          })
+          createNoteRecord(
+            {
+              ...n,
+              workspaceId,
+              visible: false,
+              id: n.id || createId('note')
+            },
+            this.state.settings
+          )
         );
         imported += 1;
       }
@@ -533,32 +709,35 @@ class Store {
     return { imported, mode: 'merge' };
   }
 
-
   duplicateNote(id) {
     const src = this.getNote(id);
     if (!src) return null;
-    const note = createNoteRecord({
-      workspaceId: src.workspaceId,
-      title: `${src.title || 'Untitled'} (copy)`,
-      content: src.content,
-      tags: src.tags.slice(),
-      color: src.color,
-      opacity: src.opacity,
-      fontSize: src.fontSize,
-      monospace: src.monospace,
-      pinned: src.pinned,
-      clickThrough: false,
-      previewMode: false,
-      visible: true,
-      bounds: {
-        x: (src.bounds.x || 0) + 28,
-        y: (src.bounds.y || 0) + 28,
-        width: src.bounds.width,
-        height: src.bounds.height
+    const note = createNoteRecord(
+      {
+        workspaceId: src.workspaceId,
+        title: `${src.title || 'Untitled'} (copy)`,
+        content: src.content,
+        tags: src.tags.slice(),
+        color: src.color,
+        opacity: src.opacity,
+        fontSize: src.fontSize,
+        monospace: src.monospace,
+        pinned: src.pinned,
+        clickThrough: false,
+        previewMode: false,
+        visible: true,
+        bounds: {
+          x: (src.bounds.x || 0) + 28,
+          y: (src.bounds.y || 0) + 28,
+          width: src.bounds.width,
+          height: src.bounds.height
+        },
+        displayId: src.displayId
       },
-      displayId: src.displayId
-    });
+      this.state.settings
+    );
     this.state.notes.push(note);
+    this.touchRecent(note.id);
     this.saveDeferred();
     return note;
   }
@@ -577,10 +756,12 @@ module.exports = {
   NOTE_COLORS,
   TEMPLATES,
   defaultShortcuts,
+  defaultSettings,
   createNoteRecord,
   emptyState,
   migrate,
   createId,
   clamp,
-  normalizeBounds
+  normalizeBounds,
+  sortNotes
 };

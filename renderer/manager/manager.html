@@ -34,7 +34,13 @@
           <ul id="tagList" class="tag-list"></ul>
         </section>
 
+        <section class="side-section recent-section">
+          <div class="side-header"><span>Recent</span></div>
+          <ul id="recentList" class="recent-list"></ul>
+        </section>
+
         <div class="side-footer">
+          <button type="button" id="btnSettings" class="text-btn">Preferences</button>
           <button type="button" id="btnShortcuts" class="text-btn">Keyboard Shortcuts</button>
           <button type="button" id="btnExport" class="text-btn">Export All</button>
           <button type="button" id="btnImport" class="text-btn">Import…</button>
@@ -44,25 +50,45 @@
       <main class="main">
         <header class="toolbar">
           <div class="search-wrap">
-            <input id="search" type="search" placeholder="Search notes…" />
+            <input id="search" type="search" placeholder="Search notes, tags, content…" autofocus />
           </div>
           <div class="toolbar-actions">
+            <select id="visibilityFilter" title="Visibility">
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="hidden">Hidden</option>
+            </select>
+            <select id="sortBy" title="Sort">
+              <option value="updated">Updated</option>
+              <option value="created">Created</option>
+              <option value="title">Title</option>
+              <option value="color">Color</option>
+            </select>
             <select id="templateSelect" title="Template for new note">
               <option value="blank">Blank</option>
-              <option value="meeting">Meeting notes</option>
-              <option value="demo">Demo talking points</option>
-              <option value="todo">Todo list</option>
-              <option value="scratch">Scratch pad</option>
             </select>
             <button type="button" id="btnNewNote" class="primary-btn">New note</button>
           </div>
         </header>
+
+        <div class="bulk-bar">
+          <label class="bulk-check">
+            <input type="checkbox" id="selectAll" />
+            <span>Select all</span>
+          </label>
+          <div class="bulk-actions">
+            <button type="button" id="btnBulkShow" class="ghost-btn" disabled>Show</button>
+            <button type="button" id="btnBulkHide" class="ghost-btn" disabled>Hide</button>
+            <span id="selCount" class="sel-count"></span>
+          </div>
+        </div>
 
         <div id="noteList" class="note-list" role="list"></div>
         <div id="empty" class="empty hidden">
           <div class="empty-icon">◈</div>
           <h2>No notes here yet</h2>
           <p>Create a note, pick a template, or switch workspace.</p>
+          <button type="button" id="btnEmptyNew" class="primary-btn">Create your first note</button>
         </div>
       </main>
     </div>

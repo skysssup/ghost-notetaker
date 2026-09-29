@@ -14,6 +14,7 @@
     title: document.getElementById('title'),
     editor: document.getElementById('editor'),
     preview: document.getElementById('preview'),
+    mdToolbar: document.getElementById('mdToolbar'),
     btnPreview: document.getElementById('btnPreview'),
     btnMono: document.getElementById('btnMono'),
     btnPin: document.getElementById('btnPin'),
@@ -24,7 +25,8 @@
     fontSize: document.getElementById('fontSize'),
     btnNew: document.getElementById('btnNew'),
     btnHide: document.getElementById('btnHide'),
-    tagLine: document.getElementById('tagLine'),
+    tagChips: document.getElementById('tagChips'),
+    tagInput: document.getElementById('tagInput'),
     modeLabel: document.getElementById('modeLabel')
   };
 
@@ -36,6 +38,32 @@
   function colorHex(id) {
     const c = colors.find((x) => x.id === id);
     return (c && c.hex) || '#c8d6e5';
+  }
+
+  function renderTags() {
+    els.tagChips.innerHTML = '';
+    (note.tags || []).forEach((tag) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tag-chip';
+      chip.title = 'Remove tag';
+      chip.innerHTML = `<span>#${escapeHtml(tag)}</span><span class="tag-x">×</span>`;
+      chip.addEventListener('click', () => {
+        const tags = (note.tags || []).filter((t) => t !== tag);
+        note.tags = tags;
+        queueSave({ tags });
+        renderTags();
+      });
+      els.tagChips.appendChild(chip);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function applyLocal(n) {
@@ -56,15 +84,14 @@
     els.btnPreview.classList.toggle('active', Boolean(n.previewMode));
     els.btnPreview.textContent = n.previewMode ? '✎' : '◈';
     setPreviewMode(Boolean(n.previewMode));
-    els.tagLine.textContent = (n.tags || []).length
-      ? n.tags.map((t) => `#${t}`).join(' ')
-      : 'no tags';
+    renderTags();
     applying = false;
   }
 
   function setPreviewMode(on) {
     els.editor.classList.toggle('hidden', on);
     els.preview.classList.toggle('hidden', !on);
+    els.mdToolbar.classList.toggle('hidden', on);
     els.modeLabel.textContent = on ? 'preview' : 'edit';
     if (on) renderPreview();
   }
@@ -97,7 +124,7 @@
     saveTimer = setTimeout(async () => {
       saveTimer = null;
       await window.ghostNote.updateNote(noteId, patch);
-    }, 180);
+    }, 160);
   }
 
   function buildPalette() {
@@ -119,7 +146,93 @@
     });
   }
 
-  // Chrome hover → temporarily disable click-through so controls work
+  function wrapSelection(before, after, placeholder) {
+    const ta = els.editor;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const value = ta.value;
+    const selected = value.slice(start, end) || placeholder || '';
+    const next = value.slice(0, start) + before + selected + after + value.slice(end);
+    ta.value = next;
+    const cursor = start + before.length + selected.length;
+    ta.focus();
+    ta.setSelectionRange(start + before.length, cursor);
+    queueSave({ content: next });
+  }
+
+  function prefixLines(prefix) {
+    const ta = els.editor;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const value = ta.value;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEnd = value.indexOf('\n', end);
+    const sliceEnd = lineEnd === -1 ? value.length : lineEnd;
+    const block = value.slice(lineStart, sliceEnd);
+    const nextBlock = block
+      .split('\n')
+      .map((line) => (line.startsWith(prefix) ? line : prefix + line))
+      .join('\n');
+    const next = value.slice(0, lineStart) + nextBlock + value.slice(sliceEnd);
+    ta.value = next;
+    ta.focus();
+    ta.setSelectionRange(lineStart, lineStart + nextBlock.length);
+    queueSave({ content: next });
+  }
+
+  function insertAtCursor(text) {
+    const ta = els.editor;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const value = ta.value;
+    const next = value.slice(0, start) + text + value.slice(end);
+    ta.value = next;
+    const pos = start + text.length;
+    ta.focus();
+    ta.setSelectionRange(pos, pos);
+    queueSave({ content: next });
+  }
+
+  els.mdToolbar.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-md]');
+    if (!btn || note.previewMode) return;
+    const kind = btn.getAttribute('data-md');
+    switch (kind) {
+      case 'h2':
+        prefixLines('## ');
+        break;
+      case 'bold':
+        wrapSelection('**', '**', 'bold');
+        break;
+      case 'italic':
+        wrapSelection('*', '*', 'italic');
+        break;
+      case 'code':
+        wrapSelection('`', '`', 'code');
+        break;
+      case 'link':
+        wrapSelection('[', '](https://)', 'label');
+        break;
+      case 'ul':
+        prefixLines('- ');
+        break;
+      case 'ol':
+        prefixLines('1. ');
+        break;
+      case 'task':
+        prefixLines('- [ ] ');
+        break;
+      case 'quote':
+        prefixLines('> ');
+        break;
+      case 'hr':
+        insertAtCursor('\n---\n');
+        break;
+      default:
+        break;
+    }
+  });
+
   let chromeHover = false;
   function setChromeHover(on) {
     if (chromeHover === on) return;
@@ -129,9 +242,8 @@
 
   els.chrome.addEventListener('mouseenter', () => setChromeHover(true));
   els.chrome.addEventListener('mouseleave', () => setChromeHover(false));
-  els.shell.addEventListener('mouseenter', () => {
-    /* fade chrome via CSS :hover */
-  });
+  els.mdToolbar.addEventListener('mouseenter', () => setChromeHover(true));
+  els.mdToolbar.addEventListener('mouseleave', () => setChromeHover(false));
 
   els.title.addEventListener('input', () => queueSave({ title: els.title.value }));
   els.editor.addEventListener('input', () => queueSave({ content: els.editor.value }));
@@ -193,6 +305,47 @@
 
   els.btnHide.addEventListener('click', () => {
     window.ghostNote.hideNote(noteId);
+  });
+
+  function addTagFromInput() {
+    const raw = els.tagInput.value.trim().replace(/^#/, '');
+    if (!raw) return;
+    const tags = Array.from(new Set([...(note.tags || []), raw]));
+    note.tags = tags;
+    els.tagInput.value = '';
+    queueSave({ tags });
+    renderTags();
+  }
+
+  els.tagInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTagFromInput();
+    } else if (e.key === 'Backspace' && !els.tagInput.value && (note.tags || []).length) {
+      const tags = note.tags.slice(0, -1);
+      note.tags = tags;
+      queueSave({ tags });
+      renderTags();
+    }
+  });
+  els.tagInput.addEventListener('blur', () => {
+    if (els.tagInput.value.trim()) addTagFromInput();
+  });
+
+  // Keyboard shortcuts for markdown while editing
+  els.editor.addEventListener('keydown', (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+    if (e.key === 'b') {
+      e.preventDefault();
+      wrapSelection('**', '**', 'bold');
+    } else if (e.key === 'i') {
+      e.preventDefault();
+      wrapSelection('*', '*', 'italic');
+    } else if (e.key === 'k') {
+      e.preventDefault();
+      wrapSelection('[', '](https://)', 'label');
+    }
   });
 
   window.ghostNote.onUpdated((n) => {

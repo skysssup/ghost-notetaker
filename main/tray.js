@@ -21,15 +21,42 @@ function createTrayImage() {
   return nativeImage.createFromDataURL(TINY_PNG);
 }
 
+function truncate(s, n) {
+  const t = String(s || 'Untitled').trim() || 'Untitled';
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
 function buildTrayMenu(api) {
   const settings = api.getSettings();
   const clickThrough = settings.globalClickThrough;
   const shortcuts = settings.shortcuts || {};
+  const contentProtection = settings.contentProtection !== false;
+  const recent = typeof api.getRecentNotes === 'function' ? api.getRecentNotes() : [];
+  const workspaces = typeof api.getWorkspaces === 'function' ? api.getWorkspaces() : [];
+  const activeWs = typeof api.getActiveWorkspaceId === 'function' ? api.getActiveWorkspaceId() : null;
 
   const templateItems = Object.values(TEMPLATES).map((t) => ({
     label: t.label,
     click: () => api.newNoteFromTemplate(t.id)
   }));
+
+  const recentItems =
+    recent.length === 0
+      ? [{ label: 'No recent notes', enabled: false }]
+      : recent.map((n) => ({
+          label: truncate(n.title, 36),
+          click: () => api.openNote(n.id)
+        }));
+
+  const workspaceItems =
+    workspaces.length === 0
+      ? [{ label: 'No workspaces', enabled: false }]
+      : workspaces.map((ws) => ({
+          label: ws.name,
+          type: 'radio',
+          checked: ws.id === activeWs,
+          click: () => api.setActiveWorkspace(ws.id)
+        }));
 
   return Menu.buildFromTemplate([
     {
@@ -48,19 +75,47 @@ function buildTrayMenu(api) {
     },
     { type: 'separator' },
     {
+      label: 'Recent Notes',
+      submenu: recentItems
+    },
+    {
+      label: 'Workspace',
+      submenu: [
+        ...workspaceItems,
+        { type: 'separator' },
+        { label: 'Manage Workspaces…', click: () => api.openManager() }
+      ]
+    },
+    { type: 'separator' },
+    {
       label: 'Notes Manager…',
       accelerator: shortcuts.toggleManager,
       click: () => api.openManager()
     },
+    {
+      label: 'Preferences…',
+      click: () => api.openSettings()
+    },
+    { type: 'separator' },
     {
       label: clickThrough ? 'Disable Click-Through' : 'Enable Click-Through',
       accelerator: shortcuts.toggleClickThrough,
       click: () => api.toggleClickThrough()
     },
     {
-      label: 'Hide / Show All Notes',
+      label: 'Hide All Notes',
       accelerator: shortcuts.hideShowAll,
-      click: () => api.toggleHideShow()
+      click: () => api.hideAll()
+    },
+    {
+      label: 'Show All Notes',
+      click: () => api.showAll()
+    },
+    {
+      label: contentProtection ? 'Content Protection: On' : 'Content Protection: Off',
+      type: 'checkbox',
+      checked: contentProtection,
+      click: () => api.toggleContentProtection()
     },
     { type: 'separator' },
     {

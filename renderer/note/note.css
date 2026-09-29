@@ -340,3 +340,114 @@ body {
 }
 
 /* Resize affordance hint at corners via transparent padding already handled by Electron */
+
+.md-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 8px 4px;
+  background: rgba(255, 255, 255, 0.32);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.shell:hover .md-toolbar,
+.shell:focus-within .md-toolbar {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.md-toolbar.hidden {
+  display: none;
+}
+
+.md-toolbar button {
+  border: none;
+  background: transparent;
+  min-width: 26px;
+  height: 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.md-toolbar button:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.md-sep {
+  width: 1px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.12);
+  margin: 0 4px;
+}
+
+.status {
+  gap: 8px;
+  min-height: 28px;
+}
+
+.tags-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tag-chip:hover {
+  background: rgba(167, 139, 250, 0.35);
+}
+
+.tag-chip .tag-x {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.tag-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 10px;
+  color: var(--text);
+  min-width: 48px;
+  max-width: 90px;
+  padding: 2px 4px;
+}
+
+.tag-input::placeholder {
+  color: var(--text-muted);
+}
+
+.palette {
+  grid-template-columns: repeat(4, 1fr);
+  width: 120px;
+}

@@ -1,7 +1,7 @@
 {
   "name": "ghost-notetaker",
-  "version": "1.0.0",
-  "description": "Translucent sticky notes invisible to screen sharing \u2014 tray app with workspaces, markdown, and click-through.",
+  "version": "1.1.0",
+  "description": "Translucent sticky notes invisible to screen sharing \u2014 tray app with workspaces, markdown toolbar, tags, and preferences.",
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",

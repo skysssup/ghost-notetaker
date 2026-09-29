@@ -14,7 +14,10 @@ const {
   NOTE_COLORS,
   TEMPLATES,
   clamp,
-  normalizeBounds
+  normalizeBounds,
+  sortNotes,
+  defaultSettings,
+  STORE_VERSION
 } = require('../main/store');
 
 describe('store helpers', () => {
@@ -34,9 +37,22 @@ describe('store helpers', () => {
   });
 
   it('exposes colors and templates', () => {
-    assert.ok(NOTE_COLORS.length >= 4);
+    assert.ok(NOTE_COLORS.length >= 10);
     assert.ok(TEMPLATES.meeting.content.includes('Agenda'));
     assert.ok(TEMPLATES.todo.content.includes('- [ ]'));
+    assert.ok(TEMPLATES.daily);
+    assert.ok(TEMPLATES.decision);
+  });
+
+  it('sortNotes supports multiple keys', () => {
+    const notes = [
+      { id: 'a', title: 'B', color: 'rose', createdAt: '2020-01-01', updatedAt: '2020-01-02' },
+      { id: 'b', title: 'A', color: 'mint', createdAt: '2021-01-01', updatedAt: '2021-01-02' }
+    ];
+    assert.equal(sortNotes(notes, 'title')[0].id, 'b');
+    assert.equal(sortNotes(notes, 'color')[0].id, 'b');
+    assert.equal(sortNotes(notes, 'created')[0].id, 'b');
+    assert.equal(sortNotes(notes, 'updated')[0].id, 'b');
   });
 });
 
@@ -46,17 +62,23 @@ describe('migrate', () => {
     assert.equal(s.workspaces.length, 1);
     assert.equal(s.notes.length, 0);
     assert.ok(s.activeWorkspaceId);
+    assert.equal(s.settings.contentProtection, true);
+    assert.equal(s.version, STORE_VERSION);
   });
 
-  it('keeps notes linked to known workspaces', () => {
+  it('keeps notes linked to known workspaces and upgrades settings', () => {
     const s = migrate({
       workspaces: [{ id: 'ws_a', name: 'A' }],
       activeWorkspaceId: 'ws_a',
-      notes: [{ id: 'n1', workspaceId: 'ws_a', title: 'Hi', content: 'x' }]
+      notes: [{ id: 'n1', workspaceId: 'ws_a', title: 'Hi', content: 'x' }],
+      settings: { globalClickThrough: true }
     });
     assert.equal(s.notes.length, 1);
     assert.equal(s.notes[0].title, 'Hi');
     assert.equal(s.activeWorkspaceId, 'ws_a');
+    assert.equal(s.settings.globalClickThrough, true);
+    assert.equal(s.settings.contentProtection, true);
+    assert.ok(s.settings.shortcuts.newNote);
   });
 });
 
@@ -92,7 +114,17 @@ describe('Store persistence', () => {
     assert.ok(updated.updatedAt >= before);
   });
 
-  it('filters by workspace, tag, and query', () => {
+  it('applies default opacity/color/font from settings', () => {
+    const store = new Store(file);
+    store.load();
+    store.updateSettings({ defaultOpacity: 0.5, defaultColor: 'rose', defaultFontSize: 18 });
+    const note = store.createNote({ title: 'Styled' });
+    assert.equal(note.opacity, 0.5);
+    assert.equal(note.color, 'rose');
+    assert.equal(note.fontSize, 18);
+  });
+
+  it('filters by workspace, tag, query, and visibility', () => {
     const store = new Store(file);
     store.load();
     const ws2 = store.createWorkspace('Work');
@@ -103,11 +135,36 @@ describe('Store persistence', () => {
       tags: ['work'],
       workspaceId: ws2.id
     });
+    store.hideNote(a.id);
     assert.equal(store.listNotes({ workspaceId: store.getActiveWorkspaceId() }).length, 1);
     assert.equal(store.listNotes({ tag: 'demo' })[0].id, a.id);
     assert.equal(store.listNotes({ query: 'hello' })[0].id, a.id);
+    assert.equal(store.listNotes({ visible: false })[0].id, a.id);
+    assert.equal(store.listNotes({ visible: true }).find((n) => n.id === a.id), undefined);
     assert.ok(store.allTags().includes('demo'));
     assert.ok(store.getNote(b.id));
+  });
+
+  it('tracks recent notes', () => {
+    const store = new Store(file);
+    store.load();
+    const a = store.createNote({ title: 'First' });
+    const b = store.createNote({ title: 'Second' });
+    store.updateNote(a.id, { content: 'touched' });
+    const recent = store.recentNotes();
+    assert.equal(recent[0].id, a.id);
+    assert.ok(recent.some((n) => n.id === b.id));
+  });
+
+  it('bulkSetVisible toggles many notes', () => {
+    const store = new Store(file);
+    store.load();
+    const a = store.createNote({ title: 'A' });
+    const b = store.createNote({ title: 'B' });
+    const count = store.bulkSetVisible([a.id, b.id], false);
+    assert.equal(count, 2);
+    assert.equal(store.getNote(a.id).visible, false);
+    assert.equal(store.getNote(b.id).visible, false);
   });
 
   it('hide does not delete; delete removes', () => {
@@ -168,7 +225,6 @@ describe('Store persistence', () => {
     assert.equal(store2.getNote(note.id).content, 'data');
   });
 
-
   it('duplicates a note with offset bounds', () => {
     const store = new Store(file);
     store.load();
@@ -189,8 +245,20 @@ describe('Store persistence', () => {
     assert.ok(n.bounds.width >= 200);
   });
 
-  it('emptyState has settings shortcuts', () => {
+  it('emptyState has settings shortcuts and defaults', () => {
     const s = emptyState();
     assert.ok(s.settings.shortcuts.newNote);
+    assert.equal(s.settings.contentProtection, true);
+    assert.deepEqual(defaultSettings().recentNoteIds, []);
+  });
+
+  it('moves notes between workspaces', () => {
+    const store = new Store(file);
+    store.load();
+    const ws2 = store.createWorkspace('Work');
+    const note = store.createNote({ title: 'Move me' });
+    store.updateNote(note.id, { workspaceId: ws2.id });
+    assert.equal(store.getNote(note.id).workspaceId, ws2.id);
+    assert.equal(store.listNotes({ workspaceId: ws2.id }).length, 1);
   });
 });

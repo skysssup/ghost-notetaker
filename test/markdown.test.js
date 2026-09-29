@@ -34,6 +34,14 @@ describe('markdown', () => {
     assert.match(html, /&lt;script&gt;/);
   });
 
+
+  it('renders blockquotes', () => {
+    const html = renderMarkdown('> spoken line\n> second');
+    assert.match(html, /<blockquote>/);
+    assert.match(html, /spoken line/);
+    assert.match(html, /<br\/>/);
+  });
+
   it('renders fenced code', () => {
     const html = renderMarkdown('```\nconst x = 1;\n```');
     assert.match(html, /<pre><code>const x = 1;/);

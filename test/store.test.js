@@ -261,4 +261,20 @@ describe('Store persistence', () => {
     assert.equal(store.getNote(note.id).workspaceId, ws2.id);
     assert.equal(store.listNotes({ workspaceId: ws2.id }).length, 1);
   });
+
+  it('rejects unknown workspaceId and color', () => {
+    const store = new Store(file);
+    store.load();
+    const note = store.createNote({ title: 'Keep me', color: 'mist' });
+    const beforeWs = note.workspaceId;
+    store.updateNote(note.id, { workspaceId: 'ws_missing', color: 'neon-green' });
+    const after = store.getNote(note.id);
+    assert.equal(after.workspaceId, beforeWs);
+    assert.equal(after.color, 'mist');
+    const ws2 = store.createWorkspace('Work');
+    store.updateNote(note.id, { workspaceId: ws2.id, color: 'rose' });
+    assert.equal(store.getNote(note.id).workspaceId, ws2.id);
+    assert.equal(store.getNote(note.id).color, 'rose');
+  });
+
 });

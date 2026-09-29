@@ -576,7 +576,15 @@ class Store {
       else if (key === 'opacity') note.opacity = clamp(Number(patch.opacity), 0.25, 1);
       else if (key === 'fontSize') note.fontSize = clamp(Number(patch.fontSize), 10, 28);
       else if (key === 'tags') note.tags = Array.isArray(patch.tags) ? patch.tags.map(String) : [];
-      else if (
+      else if (key === 'workspaceId') {
+        if (this.state.workspaces.some((w) => w.id === patch.workspaceId)) {
+          note.workspaceId = patch.workspaceId;
+        }
+      } else if (key === 'color') {
+        if (NOTE_COLORS.some((c) => c.id === patch.color)) {
+          note.color = patch.color;
+        }
+      } else if (
         key === 'monospace' ||
         key === 'pinned' ||
         key === 'clickThrough' ||

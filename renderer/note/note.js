@@ -32,7 +32,6 @@
 
   let note = null;
   let colors = [];
-  let saveTimer = null;
   let applying = false;
 
   function colorHex(id) {
@@ -117,14 +116,15 @@
     });
   }
 
+  const saveQueue = (window.GhostSaveQueue || require('./save-queue')).createSaveQueue({
+    delayMs: 160,
+    flush: (patch) => window.ghostNote.updateNote(noteId, patch)
+  });
+
   function queueSave(patch) {
     if (applying) return;
     Object.assign(note, patch);
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      saveTimer = null;
-      await window.ghostNote.updateNote(noteId, patch);
-    }, 160);
+    saveQueue.queue(patch);
   }
 
   function buildPalette() {

@@ -1,8 +1,0 @@
-node_modules
-dist
-out
-coverage
-package-lock.json
-*.min.js
-build/*.png
-docs/assets/*.png

@@ -1,13 +1,11 @@
 {
   "name": "ghost-notetaker",
   "version": "0.1.0",
-  "description": "Translucent sticky notes invisible to screen sharing \u2014 local tray app with workspaces, tags, and markdown.",
+  "description": "Translucent sticky notes invisible to screen sharing — local tray app with workspaces, tags, and markdown.",
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",
     "test": "node --test",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win"
@@ -33,8 +31,7 @@
   ],
   "devDependencies": {
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
-    "prettier": "^3.9.9"
+    "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "com.ghostnotetaker.app",

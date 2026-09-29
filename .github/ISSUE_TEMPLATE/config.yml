@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Security vulnerability
-    url: https://github.com/skysssup/ghost-notetaker/security/advisories/new
-    about: Please report security issues privately (see SECURITY.md).
-  - name: Discussions / questions
-    url: https://github.com/skysssup/ghost-notetaker/discussions
-    about: Ask usage questions or share ideas that are not bugs or concrete feature requests.

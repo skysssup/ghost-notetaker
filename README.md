@@ -1,6 +1,8 @@
 # Ghost Notetaker
 
-Sticky notes that sit on top of everything and stay **off screen shares** — Zoom, Meet, Teams, QuickTime, OBS, the OS recorder. Tray / menu-bar app. Notes are a local JSON file. No account, no sync.
+Overlay sticky notes with Electron `setContentProtection` so they are often excluded from screen capture. Tray / menu-bar app. Notes live in a local JSON file. No account, no cloud sync.
+
+Screen-share exclusion works more often on macOS. On Windows it needs a recent 10/11 build. Test against your Zoom / Meet / Teams / OBS / OS recorder — do not treat this as a guarantee for every app and driver.
 
 ## Run
 
@@ -9,7 +11,7 @@ npm install
 npm start
 ```
 
-Single-instance. No Dock icon on macOS.
+Single-instance. No Dock icon on macOS (`app.dock.hide()`).
 
 ## Shortcuts
 
@@ -25,15 +27,13 @@ Single-instance. No Dock icon on macOS.
 
 Closing a note **hides** it. Permanent delete lives in the Notes Manager.
 
-Workspaces, tags, markdown toolbar, templates, import/export, and prefs are in the tray menu / manager. Content protection uses Electron `setContentProtection`. Click-through (“ghost mode”) ignores mouse until you hover the chrome.
+Workspaces, tags, markdown toolbar, templates, import/export, and prefs are in the tray menu / manager. Click-through (“ghost mode”) ignores mouse until you hover the chrome.
 
 ## Tests
 
 ```bash
 npm test
 ```
-
-Screen-share exclusion is usually solid on macOS; Windows needs 10 build 19041+.
 
 ## License
 

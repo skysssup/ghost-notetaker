@@ -451,31 +451,21 @@ async function boot() {
 
   const visible = store.listNotes().filter((n) => n.visible);
   if (visible.length === 0 && store.listNotes().length === 0) {
-    await createNote({ templateId: 'blank', title: 'Welcome to Ghost Notetaker' });
-    const welcome = store.listNotes()[0];
-    if (welcome) {
-      store.updateNote(welcome.id, {
+    await createNote({ templateId: 'blank', title: 'Ghost' });
+    const first = store.listNotes()[0];
+    if (first) {
+      store.updateNote(first.id, {
         content: [
-          '# Ghost Notetaker',
+          '# Ghost',
           '',
-          'Translucent notes that stay **invisible** to screen sharing.',
+          'Stays off screen shares. Hover the top bar for controls.',
           '',
-          '- Hover the top edge to reveal controls',
-          '- Use the markdown toolbar for headings, bold, lists, and checklists',
-          '- Toggle markdown preview with the eye icon',
-          '- Add tags in the footer chips',
-          '- Open **Notes Manager** from the tray for workspaces & settings',
-          '',
-          '## Checklist',
-          '- [ ] Create a meeting note',
-          '- [ ] Add a tag',
-          '- [ ] Open Preferences',
-          '- [ ] Export a backup',
+          'Tray → Notes Manager for search, workspaces, prefs.',
+          'Close hides. Delete only from the manager.',
           ''
-        ].join('\n'),
-        tags: ['welcome']
+        ].join('\n')
       });
-      notes.applyNoteAppearance(welcome.id);
+      notes.applyNoteAppearance(first.id);
     }
   } else {
     await notes.openVisibleNotes();

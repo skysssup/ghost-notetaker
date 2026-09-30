@@ -49,27 +49,21 @@ const TEMPLATES = {
       '- [ ] '
     ].join('\n')
   },
-  demo: {
-    id: 'demo',
-    label: 'Demo talking points',
-    title: 'Demo talking points',
+  bug: {
+    id: 'bug',
+    label: 'Bug triage',
+    title: 'Bug',
     content: [
-      '# Demo walkthrough',
+      '# Bug',
       '',
-      '## Opening',
-      '- Context / problem',
-      '- What we built',
+      '**Repro:**',
+      '1. ',
       '',
-      '## Flow',
-      '1. Step one',
-      '2. Step two',
-      '3. Step three',
+      '**Expected:**',
       '',
-      '## Talking points',
-      '- Key design choice',
-      '- Trade-offs',
+      '**Actual:**',
       '',
-      '## Q&A reminders',
+      '## Notes',
       '- '
     ].join('\n')
   },

@@ -135,19 +135,27 @@
     saveQueue.queue(patch);
   }
 
+  function setPaletteOpen(open) {
+    els.palette.classList.toggle('hidden', !open);
+    els.btnColor.setAttribute('aria-expanded', String(open));
+  }
+
   function buildPalette() {
     els.palette.innerHTML = '';
     colors.forEach((c) => {
       const b = document.createElement('button');
       b.type = 'button';
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-label', c.label);
       b.style.background = c.hex;
       b.title = c.label;
       b.classList.toggle('selected', note && note.color === c.id);
+      b.setAttribute('aria-selected', String(Boolean(note && note.color === c.id)));
       b.addEventListener('click', () => {
         queueSave({ color: c.id });
         els.shell.style.setProperty('--note-tint', c.hex);
         els.btnColor.style.background = c.hex;
-        els.palette.classList.add('hidden');
+        setPaletteOpen(false);
         buildPalette();
       });
       els.palette.appendChild(b);
@@ -305,12 +313,19 @@
 
   els.btnColor.addEventListener('click', (e) => {
     e.stopPropagation();
-    els.palette.classList.toggle('hidden');
+    setPaletteOpen(els.palette.classList.contains('hidden'));
   });
 
   document.addEventListener('click', (e) => {
     if (!els.palette.contains(e.target) && e.target !== els.btnColor) {
-      els.palette.classList.add('hidden');
+      setPaletteOpen(false);
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !els.palette.classList.contains('hidden')) {
+      setPaletteOpen(false);
+      els.btnColor.focus();
     }
   });
 

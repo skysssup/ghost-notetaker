@@ -52,6 +52,7 @@
   };
 
   const COLOR_MAP = {};
+  let lastFocus = null;
 
   function colorHex(id) {
     return COLOR_MAP[id] || '#c8d6e5';
@@ -96,9 +97,18 @@
     els.modalBody.innerHTML = '';
     els.modalFooter.innerHTML = '';
     els.modalCard.classList.remove('wide');
+    if (lastFocus && typeof lastFocus.focus === 'function') {
+      try {
+        lastFocus.focus();
+      } catch (_) {
+        /* element may be gone */
+      }
+    }
+    lastFocus = null;
   }
 
   function openModal({ title, bodyHtml, footerButtons, wide }) {
+    lastFocus = document.activeElement;
     els.modalTitle.textContent = title;
     els.modalBody.innerHTML = bodyHtml;
     els.modalFooter.innerHTML = '';
@@ -112,11 +122,19 @@
       els.modalFooter.appendChild(btn);
     });
     els.modal.classList.remove('hidden');
+    const focusable = els.modalCard.querySelector('input, select, textarea, button:not(#modalClose)');
+    (focusable || els.modalClose).focus();
   }
 
   els.modalClose.addEventListener('click', closeModal);
   els.modal.addEventListener('click', (e) => {
     if (e.target === els.modal) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !els.modal.classList.contains('hidden')) {
+      e.preventDefault();
+      closeModal();
+    }
   });
 
   function updateBulkUi() {
@@ -424,7 +442,7 @@
   function confirmDeleteNote(note) {
     openModal({
       title: 'Delete note permanently?',
-      bodyHtml: `<p>This will permanently delete <strong>${escapeHtml(note.title || 'Untitled')}</strong>. This cannot be undone. Hiding the note keeps it in your library.</p>`,
+      bodyHtml: `<p>Delete <strong>${escapeHtml(note.title || 'Untitled')}</strong> for good? Hide keeps it around.</p>`,
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
         {
@@ -498,7 +516,7 @@
         <thead><tr><th>Action</th><th>Shortcut</th><th>Scope</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <p class="scope" style="margin-top:12px">Local shortcuts work while a note or the Notes Manager is focused. The recovery shortcut is global so you can create a note even when everything is hidden.</p>`,
+      <p class="scope" style="margin-top:12px">Local = focused note/manager. Recovery shortcut is always global.</p>`,
       footerButtons: [{ label: 'Close', primary: true, onClick: closeModal }]
     });
   }
@@ -544,7 +562,7 @@
           <label class="check-row"><input type="checkbox" id="sProtect" ${s.contentProtection !== false ? 'checked' : ''}/> Content protection (hide from screen share)</label>
           <label class="check-row ${launchSupported ? '' : 'disabled'}"><input type="checkbox" id="sLogin" ${s.launchAtLogin ? 'checked' : ''} ${launchSupported ? '' : 'disabled'}/> Launch at login${launchSupported ? '' : ' (unsupported here)'}</label>
         </div>
-        <p class="scope" style="margin-top:12px">Version ${escapeHtml(boot.version || '')} · Local-only data · No cloud sync</p>
+        <p class="scope" style="margin-top:12px">v${escapeHtml(boot.version || '')} · data stays on disk</p>
       `,
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
@@ -690,7 +708,7 @@
   els.btnImport.addEventListener('click', () => {
     openModal({
       title: 'Import notes',
-      bodyHtml: `<p>Choose how to import a Ghost Notetaker JSON backup.</p>`,
+      bodyHtml: `<p>Import a JSON backup — merge or wipe and replace.</p>`,
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
         {

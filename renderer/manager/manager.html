@@ -50,7 +50,7 @@
       <main class="main">
         <header class="toolbar">
           <div class="search-wrap">
-            <input id="search" type="search" placeholder="Search notes, tags, content…" autofocus />
+            <input id="search" type="search" placeholder="Search…" aria-label="Search notes" autofocus />
           </div>
           <div class="toolbar-actions">
             <select id="visibilityFilter" title="Visibility">
@@ -84,16 +84,16 @@
         </div>
 
         <div id="noteList" class="note-list" role="list"></div>
-        <div id="empty" class="empty hidden">
-          <div class="empty-icon">◈</div>
-          <h2>No notes here yet</h2>
-          <p>Create a note, pick a template, or switch workspace.</p>
-          <button type="button" id="btnEmptyNew" class="primary-btn">Create your first note</button>
+        <div id="empty" class="empty hidden" role="status">
+          <div class="empty-icon" aria-hidden="true">◈</div>
+          <h2>Nothing here</h2>
+          <p>New note, template, or another workspace.</p>
+          <button type="button" id="btnEmptyNew" class="primary-btn">New note</button>
         </div>
       </main>
     </div>
 
-    <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-card" id="modalCard">
         <header class="modal-head">
           <h2 id="modalTitle">Dialog</h2>

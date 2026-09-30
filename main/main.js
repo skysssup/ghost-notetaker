@@ -363,9 +363,6 @@ function registerIpc() {
     app.quit();
   });
 
-  ipcMain.on('note:drag-start', () => {
-    /* reserved */
-  });
 }
 
 async function boot() {

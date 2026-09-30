@@ -62,5 +62,7 @@ describe('templates', () => {
     assert.match(TEMPLATES.meeting.content, /Agenda/);
     assert.match(TEMPLATES.todo.content, /- \[ \]/);
     assert.ok(TEMPLATES.scratch);
+    assert.ok(TEMPLATES.bug);
+    assert.equal(TEMPLATES.demo, undefined);
   });
 });

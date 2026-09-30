@@ -30,7 +30,17 @@ function createSaveQueue({ flush, delayMs = 160 }) {
     pending = null;
   }
 
-  return { queue, pendingPatch, cancel };
+  /** Send any pending patch immediately (e.g. before hide destroys the window). */
+  function flushNow() {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const toSend = pending;
+    pending = null;
+    if (!toSend) return Promise.resolve(null);
+    return Promise.resolve(flush(toSend));
+  }
+
+  return { queue, pendingPatch, cancel, flushNow };
 }
 
 if (typeof module !== 'undefined' && module.exports) {

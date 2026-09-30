@@ -318,8 +318,26 @@
     window.ghostNote.createNote({ templateId: 'blank' });
   });
 
+  async function flushAndHide() {
+    try {
+      await saveQueue.flushNow();
+    } catch (_) {
+      /* still hide — store may already have an older revision */
+    }
+    return window.ghostNote.hideNote(noteId);
+  }
+
   els.btnHide.addEventListener('click', () => {
-    window.ghostNote.hideNote(noteId);
+    flushAndHide();
+  });
+
+  window.addEventListener('beforeunload', () => {
+    // Best-effort sync flush if the renderer is torn down mid-debounce.
+    const pending = saveQueue.pendingPatch();
+    if (pending) {
+      // Fire-and-forget; hide path already awaits flushNow.
+      saveQueue.flushNow();
+    }
   });
 
   function addTagFromInput() {

@@ -1,7 +1,7 @@
 {
   "name": "ghost-notetaker",
   "version": "1.3.0",
-  "description": "Tray overlay sticky notes with local JSON storage and content protection",
+  "description": "Tray overlay sticky notes with local JSON storage and best-effort screen-capture exclusion",
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",

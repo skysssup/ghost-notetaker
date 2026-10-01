@@ -455,7 +455,7 @@ async function boot() {
         content: [
           '# Ghost',
           '',
-          'Stays off screen shares. Hover the top bar for controls.',
+          'Best-effort hide from screen capture (not guaranteed). Hover the top bar for controls.',
           '',
           'Tray → Notes Manager for search, workspaces, prefs.',
           'Close hides. Delete only from the manager.',

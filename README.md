@@ -1,8 +1,8 @@
 # Ghost Notetaker
 
-Overlay sticky notes with Electron `setContentProtection` so they are often excluded from screen capture. Tray / menu-bar app. Notes live in a local JSON file. No account, no cloud sync.
+Overlay sticky notes for your desktop. Uses Electron `setContentProtection` as a **best-effort** way to keep notes out of screen capture — not a universal guarantee. Tray / menu-bar app. Notes live in a local JSON file. No account, no cloud sync.
 
-Screen-share exclusion works more often on macOS. On Windows it needs a recent 10/11 build. Test against your Zoom / Meet / Teams / OBS / OS recorder — do not treat this as a guarantee for every app and driver.
+Exclusion works more often on macOS. On Windows it needs a recent 10/11 build. Always verify against your Zoom / Meet / Teams / OBS / OS recorder; some apps and drivers still capture protected windows.
 
 ## Run
 
@@ -25,7 +25,7 @@ Single-instance. No Dock icon on macOS (`app.dock.hide()`).
 | Quick capture (clipboard) | `Cmd/Ctrl+Shift+Q` |
 | Recovery new note | `Cmd/Ctrl+Alt+Shift+N` |
 
-Closing a note **hides** it. Permanent delete lives in the Notes Manager.
+Closing a note **hides** it. Permanent delete is only in the Notes Manager.
 
 Workspaces, tags, markdown toolbar, templates, import/export, and prefs are in the tray menu / manager. Click-through (“ghost mode”) ignores mouse until you hover the chrome.
 

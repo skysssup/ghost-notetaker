@@ -559,7 +559,7 @@
           </div>
           <label class="check-row"><input type="checkbox" id="sMono" ${s.defaultMonospace ? 'checked' : ''}/> Default monospace font</label>
           <label class="check-row"><input type="checkbox" id="sClick" ${s.globalClickThrough ? 'checked' : ''}/> Global click-through (ghost mode)</label>
-          <label class="check-row"><input type="checkbox" id="sProtect" ${s.contentProtection !== false ? 'checked' : ''}/> Content protection (hide from screen share)</label>
+          <label class="check-row"><input type="checkbox" id="sProtect" ${s.contentProtection !== false ? 'checked' : ''}/> Content protection (best-effort hide from capture)</label>
           <label class="check-row ${launchSupported ? '' : 'disabled'}"><input type="checkbox" id="sLogin" ${s.launchAtLogin ? 'checked' : ''} ${launchSupported ? '' : 'disabled'}/> Launch at login${launchSupported ? '' : ' (unsupported here)'}</label>
         </div>
         <p class="scope" style="margin-top:12px">v${escapeHtml(boot.version || '')} · data stays on disk</p>

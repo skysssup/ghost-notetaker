@@ -94,12 +94,13 @@ function applyAlwaysOnTop(win, pinned) {
   }
 }
 
+/** Best-effort: Electron setContentProtection is not honored by every capturer. */
 function applyContentProtection(win, enabled = true) {
   if (!win || win.isDestroyed()) return;
   try {
     win.setContentProtection(Boolean(enabled));
   } catch (_) {
-    /* older Electron / platform */
+    /* older Electron / platform without the API */
   }
 }
 

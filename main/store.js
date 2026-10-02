@@ -264,13 +264,33 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n));
 }
 
-function normalizeBounds(b) {
+function normalizeBounds(b = {}) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) b = {};
+  const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
   return {
-    x: Math.round(Number(b.x) || 0),
-    y: Math.round(Number(b.y) || 0),
-    width: Math.max(200, Math.round(Number(b.width) || 360)),
-    height: Math.max(160, Math.round(Number(b.height) || 300))
+    x: Math.round(clamp(finite(b.x, 0), -1000000, 1000000)),
+    y: Math.round(clamp(finite(b.y, 0), -1000000, 1000000)),
+    width: Math.round(clamp(finite(b.width, 360), 200, 16384)),
+    height: Math.round(clamp(finite(b.height, 300), 160, 16384))
   };
+}
+
+function validateBackupRecords(raw) {
+  if (raw.version != null && (!Number.isInteger(raw.version) || raw.version < 1 || raw.version > STORE_VERSION)) {
+    throw new Error('Unsupported backup version');
+  }
+  for (const key of ['notes', 'workspaces']) {
+    if (raw[key] != null && !Array.isArray(raw[key])) throw new Error(`${key} must be an array`);
+    const ids = new Set();
+    for (const item of raw[key] || []) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`Invalid ${key} record`);
+      if (item.id != null && (typeof item.id !== 'string' || !item.id || ids.has(item.id))) throw new Error(`Invalid or duplicate ${key} id`);
+      if (item.id) ids.add(item.id);
+      for (const field of key === 'notes' ? ['title', 'content', 'workspaceId'] : ['name']) {
+        if (item[field] != null && typeof item[field] !== 'string') throw new Error(`Invalid ${key}.${field}`);
+      }
+    }
+  }
 }
 
 function migrate(raw) {
@@ -395,6 +415,7 @@ class Store {
       if (raw.workspaces != null && !Array.isArray(raw.workspaces)) {
         return this._quarantineCorrupt(new Error('Store workspaces must be an array when present'));
       }
+      validateBackupRecords(raw);
       this.state = migrate(raw);
       return this.state;
     } catch (err) {
@@ -459,9 +480,16 @@ class Store {
     }
     const dir = path.dirname(this.filePath);
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const tmp = `${this.filePath}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', mode: 0o600 });
-    fs.renameSync(tmp, this.filePath);
+    const tmp = `${this.filePath}.${crypto.randomUUID()}.tmp`;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      fs.renameSync(tmp, this.filePath);
+    } catch (err) {
+      this._lastSaveError = err;
+      throw err;
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
     this._dirty = false;
     this._lastSaveError = null;
   }
@@ -757,6 +785,7 @@ class Store {
     return {
       exportedAt: nowIso(),
       app: 'ghost-notetaker',
+      activeWorkspaceId: this.state.activeWorkspaceId,
       version: STORE_VERSION,
       workspaces: this.state.workspaces,
       notes: this.state.notes,
@@ -765,6 +794,24 @@ class Store {
   }
 
   importAll(payload, mode = 'merge') {
+    if (this._blockSave) throw new Error('Store recovery required before importing');
+    if (!['merge', 'replace'].includes(mode)) throw new Error('Invalid import mode');
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid import payload');
+    validateBackupRecords(payload);
+    const previous = structuredClone(this.state);
+    const wasDirty = this._dirty;
+    try {
+      const result = this._importAll(payload, mode);
+      this.flush();
+      return result;
+    } catch (error) {
+      this.state = previous;
+      this._dirty = wasDirty;
+      throw error;
+    }
+  }
+
+  _importAll(payload, mode) {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('Invalid import payload');
     }

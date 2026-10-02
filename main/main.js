@@ -3,6 +3,7 @@
 const path = require('path');
 const { app, ipcMain, dialog, clipboard, screen, Menu, BrowserWindow, shell } = require('electron');
 
+const { flushPendingNotes } = require('./persistence');
 const { Store, NOTE_COLORS, TEMPLATES } = require('./store');
 const {
   requireId,
@@ -347,15 +348,17 @@ function registerIpc() {
     return ok;
   });
 
-  ipcMain.handle('data:exportAll', async () => {
-    const payload = store.exportAll();
+  ipcMain.handle('data:exportAll', async (e) => {
+    assertFromApp(e);
     const { filePath, canceled } = await dialog.showSaveDialog({
       title: 'Export all notes',
       defaultPath: `ghost-notetaker-backup-${Date.now()}.json`,
       filters: [{ name: 'JSON', extensions: ['json'] }]
     });
     if (canceled || !filePath) return null;
-    require('fs').writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    await flushPendingNotes(notes, store);
+    const payload = store.exportAll();
+    require('fs').writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: 'utf8', mode: 0o600 });
     return filePath;
   });
 
@@ -376,6 +379,7 @@ function registerIpc() {
         `Could not parse import file: ${err && err.message ? err.message : String(err)}`
       );
     }
+    await flushPendingNotes(notes, store);
     let result;
     try {
       result = store.importAll(raw, importMode);
@@ -610,24 +614,15 @@ app.on('before-quit', (event) => {
   quitting = true;
   (async () => {
     try {
-      if (notes && notes.flushAllPending) {
-        await notes.flushAllPending(2000);
-      }
-      if (store) {
-        try {
-          store.flush();
-        } catch (err) {
-          console.error('Store flush on quit failed:', err);
-          // Keep dirty in-memory state; do not destroy user file with empty data when blocked.
-        }
-      }
+      await flushPendingNotes(notes, store && !store.isSaveBlocked() ? store : null);
       if (shortcuts) shortcuts.unregisterGlobal();
       if (notes) notes.destroyAll();
-    } catch (err) {
-      console.error(err);
-    } finally {
       allowQuit = true;
       app.quit();
+    } catch (err) {
+      quitting = false;
+      console.error(err);
+      dialog.showErrorBox('Notes could not be saved', `${err.message || err}. The app remains open so you can retry or export your notes.`);
     }
   })();
 });

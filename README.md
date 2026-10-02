@@ -40,3 +40,5 @@ npm test
 ## License
 
 MIT
+
+Backup imports validate every row and version before modifying state, then persist atomically before reporting success. Failed writes restore the prior in-memory state and leave the original backup intact. Export/import flush pending renderer edits first. Quit stays open with an error message when unsaved edits cannot be flushed, so they can be retried or exported.

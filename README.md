@@ -2,12 +2,14 @@
 
 Overlay sticky notes for your desktop. Uses Electron `setContentProtection` as a **best-effort** way to keep notes out of screen capture — not a universal guarantee. Tray / menu-bar app. Notes live in a local JSON file. No account, no cloud sync.
 
-Exclusion works more often on macOS. On Windows it needs a recent 10/11 build. Always verify against your Zoom / Meet / Teams / OBS / OS recorder; some apps and drivers still capture protected windows.
+Capture behavior depends on the operating system and recording API. Electron documents that macOS apps using ScreenCaptureKit can capture protected windows. Verify your actual screen-sharing setup before relying on exclusion. See [Electron's content-protection documentation](https://www.electronjs.org/docs/latest/api/browser-window#winsetcontentprotectionenable-macos-windows).
 
 ## Run
 
+Requires Node.js 22.12 or later for development. Run from the cloned repository.
+
 ```bash
-npm install
+npm ci
 npm start
 ```
 

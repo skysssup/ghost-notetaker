@@ -25,8 +25,8 @@
     "workspaces"
   ],
   "devDependencies": {
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8"
+    "electron": "^42.11.10",
+    "electron-builder": "^26.15.3"
   },
   "build": {
     "appId": "com.ghostnotetaker.app",
@@ -71,6 +71,6 @@
     "url": "https://github.com/skysssup/ghost-notetaker/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.12.0"
   }
 }

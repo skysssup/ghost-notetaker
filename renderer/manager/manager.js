@@ -92,11 +92,21 @@
       .replace(/"/g, '&quot;');
   }
 
+  function getModalFocusable() {
+    return Array.from(
+      els.modalCard.querySelectorAll(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => el.offsetParent !== null || el === els.modalClose);
+  }
+
   function closeModal() {
     els.modal.classList.add('hidden');
+    els.modal.removeAttribute('aria-hidden');
     els.modalBody.innerHTML = '';
     els.modalFooter.innerHTML = '';
     els.modalCard.classList.remove('wide');
+    document.removeEventListener('keydown', onModalKeydown, true);
     if (lastFocus && typeof lastFocus.focus === 'function') {
       try {
         lastFocus.focus();
@@ -105,6 +115,32 @@
       }
     }
     lastFocus = null;
+  }
+
+  function onModalKeydown(e) {
+    if (els.modal.classList.contains('hidden')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeModal();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const nodes = getModalFocusable();
+    if (!nodes.length) {
+      e.preventDefault();
+      els.modalClose.focus();
+      return;
+    }
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   }
 
   function openModal({ title, bodyHtml, footerButtons, wide }) {
@@ -122,19 +158,51 @@
       els.modalFooter.appendChild(btn);
     });
     els.modal.classList.remove('hidden');
-    const focusable = els.modalCard.querySelector('input, select, textarea, button:not(#modalClose)');
+    els.modal.setAttribute('aria-hidden', 'false');
+    document.addEventListener('keydown', onModalKeydown, true);
+    const focusable = els.modalCard.querySelector(
+      'input, select, textarea, button:not(#modalClose)'
+    );
     (focusable || els.modalClose).focus();
+  }
+
+  function showSafeError(title, detail) {
+    const safe = String(detail || 'Something went wrong.')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .slice(0, 500);
+    document.body.innerHTML =
+      '<div role="alert" class="app" style="padding:32px;max-width:32rem;font-family:system-ui,sans-serif">' +
+      '<h1 style="font-size:1.25rem">' +
+      String(title || 'Error').replace(/</g, '&lt;') +
+      '</h1><p style="white-space:pre-wrap;opacity:.9">' +
+      safe +
+      '</p><p style="opacity:.65;font-size:.9rem">The notes file was not modified by this panel. Restart the app after fixing the issue.</p></div>';
+  }
+
+  function showActionError(title, err) {
+    const message = err && err.message ? err.message : String(err || 'Unknown error');
+    openModal({
+      title: title || 'Action failed',
+      bodyHtml: `<p role="alert">${escapeHtml(message)}</p><p class="scope">Nothing was partially applied beyond what the error describes. You can retry.</p>`,
+      footerButtons: [
+        { label: 'Dismiss', onClick: closeModal },
+        {
+          label: 'Retry import…',
+          primary: true,
+          onClick: () => {
+            closeModal();
+            els.btnImport.click();
+          }
+        }
+      ]
+    });
   }
 
   els.modalClose.addEventListener('click', closeModal);
   els.modal.addEventListener('click', (e) => {
     if (e.target === els.modal) closeModal();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !els.modal.classList.contains('hidden')) {
-      e.preventDefault();
-      closeModal();
-    }
   });
 
   function updateBulkUi() {
@@ -705,18 +773,43 @@
   els.btnSettings.addEventListener('click', showSettings);
   els.btnShortcuts.addEventListener('click', showShortcuts);
   els.btnExport.addEventListener('click', () => api.exportAll());
+  async function runImport(mode) {
+    try {
+      const result = await api.importAll(mode);
+      if (result == null) {
+        // User canceled the file dialog
+        return;
+      }
+      await reload();
+      const bits = [];
+      if (result.imported != null) bits.push(`${result.imported} note(s) imported`);
+      if (result.collisions && result.collisions.length) {
+        bits.push(
+          `${result.collisions.length} id collision(s): local notes kept; imported copies received new ids`
+        );
+      }
+      if (result.warning) bits.push(result.warning);
+      openModal({
+        title: 'Import complete',
+        bodyHtml: `<p>${escapeHtml(bits.join('. ') || 'Done.')}</p>`,
+        footerButtons: [{ label: 'OK', primary: true, onClick: closeModal }]
+      });
+    } catch (err) {
+      showActionError('Import failed', err);
+    }
+  }
+
   els.btnImport.addEventListener('click', () => {
     openModal({
       title: 'Import notes',
-      bodyHtml: `<p>Import a JSON backup — merge or wipe and replace.</p>`,
+      bodyHtml: `<p>Import a JSON backup — merge keeps existing notes (colliding ids get a new id for the import). Replace hides imported notes and keeps your current content-protection setting.</p>`,
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
         {
           label: 'Merge',
           onClick: async () => {
             closeModal();
-            await api.importAll('merge');
-            await reload();
+            await runImport('merge');
           }
         },
         {
@@ -724,8 +817,7 @@
           danger: true,
           onClick: async () => {
             closeModal();
-            await api.importAll('replace');
-            await reload();
+            await runImport('replace');
           }
         }
       ]
@@ -755,6 +847,6 @@
 
   init().catch((err) => {
     console.error(err);
-    document.body.textContent = String(err);
+    showSafeError('Unable to open Notes Manager', err && err.message ? err.message : err);
   });
 })();

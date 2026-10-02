@@ -125,6 +125,40 @@ function sanitizeIdList(ids) {
   return ids.filter((id) => typeof id === 'string' && id.length > 0 && id.length <= 128).slice(0, 500);
 }
 
+/**
+ * Defense-in-depth: ensure the IPC event comes from a live BrowserWindow we own.
+ * @param {Electron.IpcMainInvokeEvent} event
+ * @param {import('electron').BrowserWindow | null | undefined} win
+ */
+function assertSenderWindow(event, win) {
+  if (!win || win.isDestroyed()) {
+    throw new Error('Unauthorized IPC sender');
+  }
+  if (!event || !event.sender || event.sender.isDestroyed()) {
+    throw new Error('Unauthorized IPC sender');
+  }
+  if (event.sender !== win.webContents) {
+    throw new Error('Unauthorized IPC sender');
+  }
+  return win;
+}
+
+/**
+ * @param {Electron.IpcMainInvokeEvent} event
+ * @param {Iterable<import('electron').BrowserWindow>} windows
+ */
+function assertSenderIsOneOf(event, windows) {
+  if (!event || !event.sender || event.sender.isDestroyed()) {
+    throw new Error('Unauthorized IPC sender');
+  }
+  for (const win of windows) {
+    if (win && !win.isDestroyed() && win.webContents === event.sender) {
+      return win;
+    }
+  }
+  throw new Error('Unauthorized IPC sender');
+}
+
 module.exports = {
   requireId,
   optionalId,
@@ -132,6 +166,8 @@ module.exports = {
   sanitizeCreateOptions,
   sanitizeSettingsPatch,
   sanitizeIdList,
+  assertSenderWindow,
+  assertSenderIsOneOf,
   TITLE_MAX,
   CONTENT_MAX,
   TAG_MAX_COUNT,

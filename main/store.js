@@ -362,40 +362,122 @@ class Store {
     this.filePath = filePath;
     this.state = emptyState();
     this._saveTimer = null;
+    this._blockSave = false;
+    this._dirty = false;
+    this._lastSaveError = null;
+    this.loadError = null;
   }
 
   load() {
+    this.loadError = null;
+    this._blockSave = false;
+    this._dirty = false;
+    this._lastSaveError = null;
     try {
       if (!fs.existsSync(this.filePath)) {
         this.state = emptyState();
         this.saveSync();
         return this.state;
       }
-      const raw = JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
+      const text = fs.readFileSync(this.filePath, 'utf8');
+      let raw;
+      try {
+        raw = JSON.parse(text);
+      } catch (parseErr) {
+        return this._quarantineCorrupt(parseErr);
+      }
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return this._quarantineCorrupt(new Error('Store root must be a JSON object'));
+      }
+      if (raw.notes != null && !Array.isArray(raw.notes)) {
+        return this._quarantineCorrupt(new Error('Store notes must be an array when present'));
+      }
+      if (raw.workspaces != null && !Array.isArray(raw.workspaces)) {
+        return this._quarantineCorrupt(new Error('Store workspaces must be an array when present'));
+      }
       this.state = migrate(raw);
       return this.state;
     } catch (err) {
-      this.state = emptyState();
-      return this.state;
+      return this._quarantineCorrupt(err);
     }
   }
 
+  _quarantineCorrupt(err) {
+    const stamp = Date.now();
+    const quarantinePath = `${this.filePath}.corrupt.${stamp}`;
+    try {
+      if (fs.existsSync(this.filePath)) {
+        fs.renameSync(this.filePath, quarantinePath);
+      }
+    } catch (renameErr) {
+      // If rename fails, still refuse to overwrite the original path.
+      this.state = emptyState();
+      this._blockSave = true;
+      this.loadError = {
+        message: err && err.message ? err.message : String(err),
+        quarantinePath: null,
+        originalPath: this.filePath,
+        renameError: renameErr && renameErr.message ? renameErr.message : String(renameErr)
+      };
+      return this.state;
+    }
+    this.state = emptyState();
+    this._blockSave = true;
+    this.loadError = {
+      message: err && err.message ? err.message : String(err),
+      quarantinePath,
+      originalPath: this.filePath
+    };
+    return this.state;
+  }
+
+  getLoadError() {
+    return this.loadError;
+  }
+
+  /** Clear the save block after the user acknowledges recovery to an empty store. */
+  acknowledgeCorruptRecovery() {
+    if (!this._blockSave) return this.state;
+    this._blockSave = false;
+    this.loadError = null;
+    this.state = emptyState();
+    this.saveSync();
+    return this.state;
+  }
+
+  isSaveBlocked() {
+    return Boolean(this._blockSave);
+  }
+
   saveSync() {
+    if (this._blockSave) {
+      const err = new Error(
+        'Store save blocked until corrupt-file recovery is acknowledged'
+      );
+      this._lastSaveError = err;
+      throw err;
+    }
     const dir = path.dirname(this.filePath);
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const tmp = `${this.filePath}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmp, this.filePath);
+    this._dirty = false;
+    this._lastSaveError = null;
   }
 
   saveDeferred(delayMs = 200) {
+    if (this._blockSave) return;
+    this._dirty = true;
     if (this._saveTimer) clearTimeout(this._saveTimer);
     this._saveTimer = setTimeout(() => {
       this._saveTimer = null;
       try {
         this.saveSync();
-      } catch (_) {
-        /* ignore disk errors in deferred path */
+      } catch (err) {
+        this._dirty = true;
+        this._lastSaveError = err;
+        /* keep dirty; caller can flush()/retry */
       }
     }, delayMs);
   }
@@ -405,7 +487,18 @@ class Store {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
     }
+    if (this._blockSave) {
+      throw new Error('Store save blocked until corrupt-file recovery is acknowledged');
+    }
     this.saveSync();
+  }
+
+  getLastSaveError() {
+    return this._lastSaveError;
+  }
+
+  isDirty() {
+    return Boolean(this._dirty) || Boolean(this._saveTimer);
   }
 
   getState() {
@@ -672,29 +765,53 @@ class Store {
   }
 
   importAll(payload, mode = 'merge') {
-    if (!payload || typeof payload !== 'object') {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new Error('Invalid import payload');
+    }
+    if (payload.notes != null && !Array.isArray(payload.notes)) {
+      throw new Error('Import notes must be an array');
+    }
+    if (payload.workspaces != null && !Array.isArray(payload.workspaces)) {
+      throw new Error('Import workspaces must be an array');
     }
     const incomingNotes = Array.isArray(payload.notes) ? payload.notes : [];
     const incomingWs = Array.isArray(payload.workspaces) ? payload.workspaces : [];
 
     if (mode === 'replace') {
+      // Keep the app's current protection policy; never silently adopt imported off.
+      const keepProtection = this.state.settings.contentProtection !== false;
+      const importedProtectionOff =
+        payload.settings &&
+        typeof payload.settings === 'object' &&
+        payload.settings.contentProtection === false;
       const migrated = migrate({
         workspaces: incomingWs.length ? incomingWs : undefined,
         notes: incomingNotes,
         settings: payload.settings,
         activeWorkspaceId: payload.activeWorkspaceId
       });
+      // Force notes hidden so they open under the current protection policy when the user chooses.
+      migrated.notes = migrated.notes.map((n) => ({ ...n, visible: false }));
+      migrated.settings.contentProtection = keepProtection;
       this.state = migrated;
       this.saveDeferred();
-      return { imported: this.state.notes.length, mode: 'replace' };
+      return {
+        imported: this.state.notes.length,
+        mode: 'replace',
+        notesHidden: true,
+        protectionPreserved: true,
+        importedProtectionOff: Boolean(importedProtectionOff),
+        warning: importedProtectionOff
+          ? 'Imported backup had content protection off; app protection policy was preserved and notes were left hidden.'
+          : 'Replace import left notes hidden so they open under the current protection policy.'
+      };
     }
 
     const wsIdMap = new Map();
     for (const w of incomingWs) {
       const existing = this.state.workspaces.find((x) => x.id === w.id || x.name === w.name);
       if (existing) {
-        wsIdMap.set(w.id, existing.id);
+        if (w.id) wsIdMap.set(w.id, existing.id);
       } else {
         const created = this.createWorkspace(w.name || 'Imported');
         if (w.id) wsIdMap.set(w.id, created.id);
@@ -702,47 +819,43 @@ class Store {
     }
 
     let imported = 0;
+    const collisions = [];
     for (const n of incomingNotes) {
       const workspaceId =
         wsIdMap.get(n.workspaceId) ||
         (this.state.workspaces.some((w) => w.id === n.workspaceId)
           ? n.workspaceId
           : this.state.activeWorkspaceId);
-      const existing = this.getNote(n.id);
+      const wantedId = n.id && typeof n.id === 'string' ? n.id : null;
+      const existing = wantedId ? this.getNote(wantedId) : null;
+      // Preserve both on ID collision: keep local note, assign a fresh id to the import.
+      const id = existing ? createId('note') : wantedId || createId('note');
       if (existing) {
-        this.updateNote(n.id, {
-          title: n.title,
-          content: n.content,
-          tags: n.tags,
-          color: n.color,
-          opacity: n.opacity,
-          fontSize: n.fontSize,
-          monospace: n.monospace,
-          pinned: n.pinned,
-          clickThrough: n.clickThrough,
-          previewMode: n.previewMode,
-          visible: false,
-          bounds: n.bounds,
-          displayId: n.displayId,
-          workspaceId
-        });
-      } else {
-        this.state.notes.push(
-          createNoteRecord(
-            {
-              ...n,
-              workspaceId,
-              visible: false,
-              id: n.id || createId('note')
-            },
-            this.state.settings
-          )
-        );
-        imported += 1;
+        collisions.push({ importedId: wantedId, localId: existing.id, newId: id });
       }
+      this.state.notes.push(
+        createNoteRecord(
+          {
+            ...n,
+            workspaceId,
+            visible: false,
+            id
+          },
+          this.state.settings
+        )
+      );
+      imported += 1;
     }
     this.saveDeferred();
-    return { imported, mode: 'merge' };
+    return {
+      imported,
+      mode: 'merge',
+      collisions,
+      warning:
+        collisions.length > 0
+          ? `${collisions.length} note id collision(s): local notes kept; imported copies got new ids.`
+          : undefined
+    };
   }
 
   duplicateNote(id) {

@@ -161,6 +161,36 @@ class NoteWindowController {
     }
   }
 
+  /**
+   * Ask each open note renderer to flush debounced edits before quit/hide-all.
+   * Returns per-window results; failed flushes keep dirty state in the renderer.
+   */
+  async flushAllPending(timeoutMs = 1500) {
+    const results = [];
+    for (const [id, win] of Array.from(this.windows.entries())) {
+      if (!win || win.isDestroyed()) continue;
+      try {
+        const result = await Promise.race([
+          win.webContents.executeJavaScript(
+            'typeof window.__ghostFlushPending === "function" ? window.__ghostFlushPending() : ({ ok: true })',
+            true
+          ),
+          new Promise((resolve) =>
+            setTimeout(() => resolve({ ok: false, message: 'flush timeout' }), timeoutMs)
+          )
+        ]);
+        results.push({ id, ...(result && typeof result === 'object' ? result : { ok: true }) });
+      } catch (err) {
+        results.push({
+          id,
+          ok: false,
+          message: err && err.message ? err.message : String(err)
+        });
+      }
+    }
+    return results;
+  }
+
   async openVisibleNotes() {
     const notes = this.store.listNotes().filter((n) => n.visible);
     for (const n of notes) {

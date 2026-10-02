@@ -9,7 +9,9 @@ const {
   sanitizeNotePatch,
   sanitizeCreateOptions,
   sanitizeSettingsPatch,
-  sanitizeIdList
+  sanitizeIdList,
+  assertSenderWindow,
+  assertSenderIsOneOf
 } = require('./ipc-guards');
 const {
   hideDockIcon,
@@ -29,6 +31,38 @@ let manager;
 let shortcuts;
 let trayApi;
 let quitting = false;
+let allowQuit = false;
+
+function ownedWindows() {
+  const list = [];
+  if (manager && manager.win && !manager.win.isDestroyed()) list.push(manager.win);
+  if (notes) {
+    for (const win of notes.windows.values()) {
+      if (win && !win.isDestroyed()) list.push(win);
+    }
+  }
+  return list;
+}
+
+function assertFromApp(event) {
+  return assertSenderIsOneOf(event, ownedWindows());
+}
+
+function assertFromNote(event, noteId) {
+  const win = notes ? notes.get(noteId) : null;
+  return assertSenderWindow(event, win);
+}
+
+function assertFromManagerOrNote(event, noteId) {
+  const noteWin = notes ? notes.get(noteId) : null;
+  if (noteWin && !noteWin.isDestroyed() && event.sender === noteWin.webContents) {
+    return noteWin;
+  }
+  if (manager && manager.win && !manager.win.isDestroyed() && event.sender === manager.win.webContents) {
+    return manager.win;
+  }
+  throw new Error('Unauthorized IPC sender');
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -174,29 +208,44 @@ function registerIpc() {
     return store.recentNotes(Number.isFinite(n) ? Math.min(24, Math.max(1, n)) : 8);
   });
 
-  ipcMain.handle('notes:create', async (_e, options) => {
+  ipcMain.handle('notes:create', async (e, options) => {
+    assertFromApp(e);
     const note = await createNote(sanitizeCreateOptions(options));
     return note;
   });
 
-  ipcMain.handle('notes:update', (_e, id, patch) => {
+  ipcMain.handle('notes:update', (e, id, patch) => {
     const noteId = requireId(id, 'noteId');
-    const note = store.updateNote(noteId, sanitizeNotePatch(patch));
-    if (note) {
-      notes.applyNoteAppearance(noteId);
-      refreshManagerAndTray();
+    assertFromManagerOrNote(e, noteId);
+    if (store.isSaveBlocked && store.isSaveBlocked()) {
+      return { __saveError: 'Store recovery required before saving' };
     }
-    return note;
+    try {
+      const note = store.updateNote(noteId, sanitizeNotePatch(patch));
+      if (note) {
+        notes.applyNoteAppearance(noteId);
+        refreshManagerAndTray();
+      }
+      const saveErr = store.getLastSaveError && store.getLastSaveError();
+      if (saveErr) {
+        return { ...(note || {}), __saveError: saveErr.message || String(saveErr) };
+      }
+      return note;
+    } catch (err) {
+      return { __saveError: err && err.message ? err.message : String(err) };
+    }
   });
 
-  ipcMain.handle('notes:hide', (_e, id) => {
+  ipcMain.handle('notes:hide', (e, id) => {
     const noteId = requireId(id, 'noteId');
+    assertFromManagerOrNote(e, noteId);
     notes.hide(noteId);
     refreshManagerAndTray();
     return true;
   });
 
-  ipcMain.handle('notes:open', async (_e, id) => {
+  ipcMain.handle('notes:open', async (e, id) => {
+    assertFromApp(e);
     const noteId = requireId(id, 'noteId');
     store.updateNote(noteId, { visible: true });
     await notes.open(noteId);
@@ -204,7 +253,8 @@ function registerIpc() {
     return store.getNote(noteId);
   });
 
-  ipcMain.handle('notes:delete', async (_e, id) => {
+  ipcMain.handle('notes:delete', async (e, id) => {
+    assertFromApp(e);
     const noteId = requireId(id, 'noteId');
     notes.closeAndDestroy(noteId);
     const ok = store.deleteNote(noteId);
@@ -251,15 +301,17 @@ function registerIpc() {
     return filePath;
   });
 
-  ipcMain.handle('notes:setClickThrough', (_e, id, enabled) => {
+  ipcMain.handle('notes:setClickThrough', (e, id, enabled) => {
     const noteId = requireId(id, 'noteId');
+    assertFromNote(e, noteId);
     const note = store.updateNote(noteId, { clickThrough: Boolean(enabled) });
     if (note) notes.applyNoteAppearance(noteId);
     return note;
   });
 
-  ipcMain.handle('notes:chromeHover', (_e, id, hovering) => {
+  ipcMain.handle('notes:chromeHover', (e, id, hovering) => {
     const noteId = requireId(id, 'noteId');
+    assertFromNote(e, noteId);
     const win = notes.get(noteId);
     const note = store.getNote(noteId);
     if (!win || !note) return;
@@ -307,7 +359,8 @@ function registerIpc() {
     return filePath;
   });
 
-  ipcMain.handle('data:importAll', async (_e, mode) => {
+  ipcMain.handle('data:importAll', async (e, mode) => {
+    assertFromApp(e);
     const importMode = mode === 'replace' ? 'replace' : 'merge';
     const { filePaths, canceled } = await dialog.showOpenDialog({
       title: 'Import notes',
@@ -315,18 +368,49 @@ function registerIpc() {
       properties: ['openFile']
     });
     if (canceled || !filePaths || !filePaths[0]) return null;
-    const raw = JSON.parse(require('fs').readFileSync(filePaths[0], 'utf8'));
-    const result = store.importAll(raw, importMode);
+    let raw;
+    try {
+      raw = JSON.parse(require('fs').readFileSync(filePaths[0], 'utf8'));
+    } catch (err) {
+      throw new Error(
+        `Could not parse import file: ${err && err.message ? err.message : String(err)}`
+      );
+    }
+    let result;
+    try {
+      result = store.importAll(raw, importMode);
+    } catch (err) {
+      throw new Error(err && err.message ? err.message : String(err));
+    }
     if (importMode === 'replace') {
       notes.destroyAll();
+      // Notes are forced hidden on replace; do not reopen under imported protection settings.
       await notes.openVisibleNotes();
     }
     refreshManagerAndTray();
     return result;
   });
 
+  ipcMain.handle('store:getLoadError', (e) => {
+    assertFromApp(e);
+    return store.getLoadError ? store.getLoadError() : null;
+  });
+
+  ipcMain.handle('store:acknowledgeCorruptRecovery', (e) => {
+    assertFromApp(e);
+    if (!store.acknowledgeCorruptRecovery) return null;
+    const state = store.acknowledgeCorruptRecovery();
+    refreshManagerAndTray();
+    return {
+      ok: true,
+      workspaces: state.workspaces.length,
+      notes: state.notes.length
+    };
+  });
+
   ipcMain.handle('settings:get', () => store.getSettings());
-  ipcMain.handle('settings:update', (_e, patch) => {
+  ipcMain.handle('settings:update', (e, patch) => {
+    assertFromApp(e);
     const safe = sanitizeSettingsPatch(patch);
     const s = store.updateSettings(safe);
     if (safe.shortcuts) shortcuts.registerGlobal();
@@ -345,7 +429,8 @@ function registerIpc() {
 
   ipcMain.handle('shortcuts:list', () => shortcuts.listDefinitions());
 
-  ipcMain.handle('shell:openExternal', async (_e, url) => {
+  ipcMain.handle('shell:openExternal', async (e, url) => {
+    assertFromApp(e);
     if (typeof url !== 'string' || url.length > 2048) return false;
     let parsed;
     try {
@@ -370,6 +455,36 @@ async function boot() {
 
   store = new Store(storePath());
   store.load();
+
+  if (store.getLoadError && store.getLoadError()) {
+    const info = store.getLoadError();
+    const detail = [
+      info.message || 'The notes file could not be read.',
+      info.quarantinePath
+        ? `Original file quarantined at:\n${info.quarantinePath}`
+        : 'The original file was left in place because it could not be moved.',
+      '',
+      'Choose Recover to start with an empty notebook (explicit).',
+      'Choose Quit to exit without writing a new store file.'
+    ].join('\n');
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      title: 'Ghost Notetaker — store recovery',
+      message: 'Notes data looks corrupt',
+      detail,
+      buttons: ['Recover empty notebook', 'Quit'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
+    });
+    if (response !== 0) {
+      allowQuit = true;
+      quitting = true;
+      app.quit();
+      return;
+    }
+    store.acknowledgeCorruptRecovery();
+  }
 
   // Reconcile launch-at-login with OS
   const settings = store.getSettings();
@@ -480,15 +595,41 @@ app
     console.error('Ghost Notetaker failed to start:', err);
   });
 
-app.on('before-quit', () => {
-  quitting = true;
-  try {
-    if (shortcuts) shortcuts.unregisterGlobal();
-    if (store) store.flush();
-    if (notes) notes.destroyAll();
-  } catch (err) {
-    console.error(err);
+app.on('before-quit', (event) => {
+  if (allowQuit) {
+    quitting = true;
+    try {
+      if (shortcuts) shortcuts.unregisterGlobal();
+      if (notes) notes.destroyAll();
+    } catch (err) {
+      console.error(err);
+    }
+    return;
   }
+  event.preventDefault();
+  quitting = true;
+  (async () => {
+    try {
+      if (notes && notes.flushAllPending) {
+        await notes.flushAllPending(2000);
+      }
+      if (store) {
+        try {
+          store.flush();
+        } catch (err) {
+          console.error('Store flush on quit failed:', err);
+          // Keep dirty in-memory state; do not destroy user file with empty data when blocked.
+        }
+      }
+      if (shortcuts) shortcuts.unregisterGlobal();
+      if (notes) notes.destroyAll();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      allowQuit = true;
+      app.quit();
+    }
+  })();
 });
 
 app.on('window-all-closed', () => {

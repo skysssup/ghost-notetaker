@@ -24,7 +24,7 @@
         <section class="side-section">
           <div class="side-header">
             <span>Workspaces</span>
-            <button type="button" id="btnNewWs" class="mini-btn" title="New workspace">＋</button>
+            <button type="button" id="btnNewWs" class="mini-btn" title="New workspace" aria-label="New workspace">＋</button>
           </div>
           <ul id="wsList" class="ws-list"></ul>
         </section>
@@ -53,18 +53,18 @@
             <input id="search" type="search" placeholder="Search…" aria-label="Search notes" autofocus />
           </div>
           <div class="toolbar-actions">
-            <select id="visibilityFilter" title="Visibility">
+            <select id="visibilityFilter" title="Visibility" aria-label="Filter by visibility">
               <option value="all">All</option>
               <option value="open">Open</option>
               <option value="hidden">Hidden</option>
             </select>
-            <select id="sortBy" title="Sort">
+            <select id="sortBy" title="Sort" aria-label="Sort notes">
               <option value="updated">Updated</option>
               <option value="created">Created</option>
               <option value="title">Title</option>
               <option value="color">Color</option>
             </select>
-            <select id="templateSelect" title="Template for new note">
+            <select id="templateSelect" title="Template for new note" aria-label="Template for new note">
               <option value="blank">Blank</option>
             </select>
             <button type="button" id="btnNewNote" class="primary-btn">New note</button>
@@ -97,7 +97,7 @@
       <div class="modal-card" id="modalCard">
         <header class="modal-head">
           <h2 id="modalTitle">Dialog</h2>
-          <button type="button" id="modalClose" class="icon-btn">✕</button>
+          <button type="button" id="modalClose" class="icon-btn" aria-label="Close dialog">✕</button>
         </header>
         <div id="modalBody" class="modal-body"></div>
         <footer id="modalFooter" class="modal-footer"></footer>

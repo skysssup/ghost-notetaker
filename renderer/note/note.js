@@ -4,7 +4,8 @@
   const params = new URLSearchParams(location.search);
   const noteId = params.get('id');
   if (!noteId || !window.ghostNote) {
-    document.body.textContent = 'Unable to load note.';
+    document.body.innerHTML =
+      '<div role="alert" style="font-family:system-ui,sans-serif;padding:24px">Unable to load note.</div>';
     return;
   }
 
@@ -126,7 +127,13 @@
 
   const saveQueue = (window.GhostSaveQueue || require('./save-queue')).createSaveQueue({
     delayMs: 160,
-    flush: (patch) => window.ghostNote.updateNote(noteId, patch)
+    flush: async (patch) => {
+      const result = await window.ghostNote.updateNote(noteId, patch);
+      if (result && result.__saveError) {
+        throw new Error(result.__saveError);
+      }
+      return result;
+    }
   });
 
   function queueSave(patch) {
@@ -336,8 +343,10 @@
   async function flushAndHide() {
     try {
       await saveQueue.flushNow();
-    } catch (_) {
-      /* still hide — store may already have an older revision */
+      setSaveStatus(null);
+    } catch (err) {
+      setSaveStatus('error', 'Save failed — note kept open so you can retry');
+      return false;
     }
     return window.ghostNote.hideNote(noteId);
   }
@@ -346,12 +355,23 @@
     flushAndHide();
   });
 
+  // Used by main-process quit coordination (executeJavaScript).
+  window.__ghostFlushPending = () =>
+    saveQueue.flushNow().then(
+      () => {
+        setSaveStatus(null);
+        return { ok: true };
+      },
+      (err) => {
+        setSaveStatus('error', 'Save failed — unsaved edits kept');
+        return { ok: false, message: err && err.message ? err.message : String(err) };
+      }
+    );
+
   window.addEventListener('beforeunload', () => {
-    // Best-effort sync flush if the renderer is torn down mid-debounce.
-    const pending = saveQueue.pendingPatch();
-    if (pending) {
-      // Fire-and-forget; hide path already awaits flushNow.
-      saveQueue.flushNow();
+    if (saveQueue.hasPending && saveQueue.hasPending()) {
+      // Best-effort; quit path awaits __ghostFlushPending.
+      saveQueue.flushNow().catch(() => {});
     }
   });
 
@@ -409,15 +429,49 @@
     colors = boot.colors || [];
     const n = await window.ghostNote.getNote(noteId);
     if (!n) {
-      document.body.textContent = 'Note not found.';
+      showSafeError('Note not found', 'This note id is missing from the local store.');
       return;
     }
     applyLocal(n);
     buildPalette();
   }
 
+  function showSafeError(title, detail) {
+    const safeDetail = String(detail || 'Something went wrong.')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .slice(0, 400);
+    document.body.innerHTML =
+      '<div role="alert" style="font-family:system-ui,sans-serif;padding:24px;max-width:28rem;line-height:1.45">' +
+      '<h1 style="font-size:1.1rem;margin:0 0 8px">' +
+      String(title || 'Error').replace(/</g, '&lt;') +
+      '</h1><p style="margin:0;opacity:.85;white-space:pre-wrap">' +
+      safeDetail +
+      '</p><p style="margin:12px 0 0;opacity:.65;font-size:.85rem">Your notes file was not modified by this panel.</p></div>';
+  }
+
+  function setSaveStatus(kind, message) {
+    let el = document.getElementById('saveStatus');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'saveStatus';
+      el.setAttribute('role', 'status');
+      el.style.cssText =
+        'position:absolute;left:10px;bottom:28px;z-index:5;font-size:11px;padding:4px 8px;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;max-width:80%;';
+      (els.shell || document.body).appendChild(el);
+    }
+    if (!kind) {
+      el.hidden = true;
+      el.textContent = '';
+      return;
+    }
+    el.hidden = false;
+    el.textContent = message || (kind === 'error' ? 'Save failed — edits kept locally' : 'Saving…');
+    el.style.background = kind === 'error' ? 'rgba(140,20,20,.85)' : 'rgba(0,0,0,.55)';
+  }
+
   init().catch((err) => {
     console.error(err);
-    document.body.textContent = String(err);
+    showSafeError('Unable to open note', err && err.message ? err.message : err);
   });
 })();

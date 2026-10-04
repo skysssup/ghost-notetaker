@@ -1152,6 +1152,10 @@ input[type='checkbox'] {
   padding-left: 1.25em;
 }
 
+.card-body ol {
+  padding-left: 2.4em;
+}
+
 .card-body li::marker {
   color: var(--ink-2);
 }

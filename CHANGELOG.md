@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.1] - 2026-10-04
+
+### Fixed
+
+- Numbered lists on board cards in the Notes Manager showed their numbers cut off at the left edge of the card.
+
 ## [1.6.0] - 2026-10-04
 
 ### Changed

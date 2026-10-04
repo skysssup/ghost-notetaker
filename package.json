@@ -1,6 +1,6 @@
 {
   "name": "ghost-notetaker",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Always-on-top Markdown sticky notes for the desktop, stored in a local JSON file, with best-effort hiding from screen capture on macOS and Windows",
   "main": "main/main.js",
   "scripts": {

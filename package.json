@@ -1,14 +1,18 @@
 {
   "name": "ghost-notetaker",
-  "version": "1.3.0",
-  "description": "Tray overlay sticky notes with local JSON storage and best-effort screen-capture exclusion",
+  "version": "1.4.0",
+  "description": "Always-on-top Markdown sticky notes for the desktop, stored in a local JSON file, with best-effort hiding from screen capture on macOS and Windows",
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",
     "test": "node --test",
-    "dist": "electron-builder",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win"
+    "test:e2e": "node --test --test-concurrency=1 \"e2e/*.e2e.js\"",
+    "smoke:packaged": "node scripts/smoke-packaged.js",
+    "icons": "electron scripts/render-icons.js",
+    "dist": "electron-builder --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
   },
   "author": {
     "name": "Sky",
@@ -18,19 +22,22 @@
   "keywords": [
     "sticky-notes",
     "electron",
-    "screen-sharing",
-    "content-protection",
-    "tray",
     "markdown",
+    "tray",
+    "always-on-top",
+    "screen-capture",
+    "content-protection",
     "workspaces"
   ],
   "devDependencies": {
     "electron": "^42.11.10",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "playwright": "^1.63.0"
   },
   "build": {
     "appId": "com.ghostnotetaker.app",
     "productName": "Ghost Notetaker",
+    "artifactName": "ghost-notetaker-${version}-${os}-${arch}.${ext}",
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -38,28 +45,59 @@
     "files": [
       "main/**/*",
       "renderer/**/*",
-      "build/**/*",
+      "build/*.png",
       "package.json"
     ],
+    "publish": null,
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
         "dmg",
         "zip"
       ],
-      "identity": null,
-      "hardenedRuntime": true,
+      "identity": "-",
+      "hardenedRuntime": false,
       "gatekeeperAssess": false
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ghost Notetaker"
+      "shortcutName": "Ghost Notetaker",
+      "artifactName": "ghost-notetaker-${version}-win-${arch}-setup.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Utility",
+      "synopsis": "Always-on-top Markdown sticky notes",
+      "maintainer": "skysssup <291946563+skysssup@users.noreply.github.com>",
+      "executableArgs": [
+        "--ozone-platform=x11"
+      ]
     }
   },
   "repository": {

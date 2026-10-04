@@ -13,9 +13,8 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function inlineFormat(text) {
+function formatSpan(text) {
   let s = escapeHtml(text);
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
   s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
@@ -26,6 +25,14 @@ function inlineFormat(text) {
     '<a href="$2" rel="noreferrer noopener">$1</a>'
   );
   return s;
+}
+
+/** Inline Markdown; text inside `code spans` is shown literally. */
+function inlineFormat(text) {
+  return String(text)
+    .split(/(`[^`]+`)/)
+    .map((part, i) => (i % 2 ? `<code>${escapeHtml(part.slice(1, -1))}</code>` : formatSpan(part)))
+    .join('');
 }
 
 function renderMarkdown(src) {
@@ -108,16 +115,10 @@ function renderMarkdown(src) {
       if (listType && listType !== 'task') flushList();
       listType = 'task';
       const checked = /x/i.test(task[2]);
-      const idx = listBuf.length;
       listBuf.push(
-        `<li class="task-item" data-task-index="${idx}">` +
+        `<li class="task-item" data-task-line="${i}">` +
           `<label><input type="checkbox" class="task-check" ${checked ? 'checked' : ''}/>` +
           `<span>${inlineFormat(task[3])}</span></label></li>`
-      );
-      // fix: track absolute line indices for toggling — store line number
-      listBuf[listBuf.length - 1] = listBuf[listBuf.length - 1].replace(
-        `data-task-index="${idx}"`,
-        `data-task-line="${i}"`
       );
       i += 1;
       continue;
@@ -182,11 +183,9 @@ function toggleTaskAtLine(src, lineIndex) {
     .split('\n');
   if (lineIndex < 0 || lineIndex >= lines.length) return src;
   const line = lines[lineIndex];
-  if (/\[ \]/.test(line)) {
-    lines[lineIndex] = line.replace('[ ]', '[x]');
-  } else if (/\[[xX]\]/.test(line)) {
-    lines[lineIndex] = line.replace(/\[[xX]\]/, '[ ]');
-  }
+  const marker = /^(\s*[-*]\s+\[)([ xX])\]/.exec(line);
+  if (!marker) return src;
+  lines[lineIndex] = `${marker[1]}${marker[2] === ' ' ? 'x' : ' '}]${line.slice(marker[0].length)}`;
   return lines.join('\n');
 }
 

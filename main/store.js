@@ -227,6 +227,10 @@ function defaultNoteBounds() {
   return { x: 120, y: 120, width: 360, height: 300 };
 }
 
+function isKnownColor(id) {
+  return NOTE_COLORS.some((c) => c.id === id);
+}
+
 function createNoteRecord(partial = {}, settings = null) {
   const stamp = nowIso();
   const defaults = settings || defaultSettings();
@@ -236,7 +240,11 @@ function createNoteRecord(partial = {}, settings = null) {
     title: clampTitle(partial.title != null ? partial.title : 'Untitled'),
     content: clampContent(partial.content != null ? partial.content : ''),
     tags: normalizeTags(partial.tags),
-    color: partial.color || defaults.defaultColor || 'mist',
+    color: isKnownColor(partial.color)
+      ? partial.color
+      : isKnownColor(defaults.defaultColor)
+        ? defaults.defaultColor
+        : 'mist',
     opacity: clamp(
       partial.opacity != null ? Number(partial.opacity) : defaults.defaultOpacity,
       0.25,
@@ -377,8 +385,15 @@ function sortNotes(notes, sortBy) {
   return list;
 }
 
+const SAVE_RETRY_MS = 2000;
+
 class Store {
-  constructor(filePath) {
+  /**
+   * @param {string} filePath
+   * @param {{ onSaveStateChange?: (state: { ok: boolean, message?: string }) => void }} [options]
+   *   Called when writing to disk starts failing or recovers.
+   */
+  constructor(filePath, { onSaveStateChange } = {}) {
     this.filePath = filePath;
     this.state = emptyState();
     this._saveTimer = null;
@@ -386,50 +401,62 @@ class Store {
     this._dirty = false;
     this._lastSaveError = null;
     this.loadError = null;
+    this.onSaveStateChange = onSaveStateChange || (() => {});
   }
 
+  _setSaveError(err) {
+    const changed = Boolean(err) !== Boolean(this._lastSaveError);
+    this._lastSaveError = err;
+    if (changed) {
+      this.onSaveStateChange(err ? { ok: false, message: err.message || String(err) } : { ok: true });
+    }
+  }
+
+  /**
+   * Read the store from disk. Unparseable or structurally invalid data is
+   * quarantined; I/O errors (missing permissions, full disk) are thrown so the
+   * caller can report them instead of mislabeling a readable file as corrupt.
+   */
   load() {
     this.loadError = null;
     this._blockSave = false;
     this._dirty = false;
     this._lastSaveError = null;
+    if (!fs.existsSync(this.filePath)) {
+      this.state = emptyState();
+      this.saveSync();
+      return this.state;
+    }
+    const text = fs.readFileSync(this.filePath, 'utf8');
+    let raw;
     try {
-      if (!fs.existsSync(this.filePath)) {
-        this.state = emptyState();
-        this.saveSync();
-        return this.state;
-      }
-      const text = fs.readFileSync(this.filePath, 'utf8');
-      let raw;
-      try {
-        raw = JSON.parse(text);
-      } catch (parseErr) {
-        return this._quarantineCorrupt(parseErr);
-      }
+      raw = JSON.parse(text);
+    } catch (parseErr) {
+      return this._quarantineCorrupt(parseErr);
+    }
+    try {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        return this._quarantineCorrupt(new Error('Store root must be a JSON object'));
+        throw new Error('Store root must be a JSON object');
       }
       if (raw.notes != null && !Array.isArray(raw.notes)) {
-        return this._quarantineCorrupt(new Error('Store notes must be an array when present'));
+        throw new Error('Store notes must be an array when present');
       }
       if (raw.workspaces != null && !Array.isArray(raw.workspaces)) {
-        return this._quarantineCorrupt(new Error('Store workspaces must be an array when present'));
+        throw new Error('Store workspaces must be an array when present');
       }
       validateBackupRecords(raw);
       this.state = migrate(raw);
-      return this.state;
     } catch (err) {
       return this._quarantineCorrupt(err);
     }
+    return this.state;
   }
 
   _quarantineCorrupt(err) {
     const stamp = Date.now();
     const quarantinePath = `${this.filePath}.corrupt.${stamp}`;
     try {
-      if (fs.existsSync(this.filePath)) {
-        fs.renameSync(this.filePath, quarantinePath);
-      }
+      fs.renameSync(this.filePath, quarantinePath);
     } catch (renameErr) {
       // If rename fails, still refuse to overwrite the original path.
       this.state = emptyState();
@@ -459,6 +486,10 @@ class Store {
   /** Clear the save block after the user acknowledges recovery to an empty store. */
   acknowledgeCorruptRecovery() {
     if (!this._blockSave) return this.state;
+    if (this.loadError && !this.loadError.quarantinePath && fs.existsSync(this.filePath)) {
+      // The corrupt file could not be moved aside; keep a copy before replacing it.
+      fs.copyFileSync(this.filePath, `${this.filePath}.corrupt.${Date.now()}`);
+    }
     this._blockSave = false;
     this.loadError = null;
     this.state = emptyState();
@@ -475,7 +506,7 @@ class Store {
       const err = new Error(
         'Store save blocked until corrupt-file recovery is acknowledged'
       );
-      this._lastSaveError = err;
+      this._setSaveError(err);
       throw err;
     }
     const dir = path.dirname(this.filePath);
@@ -485,15 +516,16 @@ class Store {
       fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       fs.renameSync(tmp, this.filePath);
     } catch (err) {
-      this._lastSaveError = err;
+      this._setSaveError(err);
       throw err;
     } finally {
       fs.rmSync(tmp, { force: true });
     }
     this._dirty = false;
-    this._lastSaveError = null;
+    this._setSaveError(null);
   }
 
+  /** Save shortly; while the disk refuses writes, keep the changes and retry. */
   saveDeferred(delayMs = 200) {
     if (this._blockSave) return;
     this._dirty = true;
@@ -502,10 +534,8 @@ class Store {
       this._saveTimer = null;
       try {
         this.saveSync();
-      } catch (err) {
-        this._dirty = true;
-        this._lastSaveError = err;
-        /* keep dirty; caller can flush()/retry */
+      } catch (_) {
+        this.saveDeferred(SAVE_RETRY_MS);
       }
     }, delayMs);
   }
@@ -527,10 +557,6 @@ class Store {
 
   isDirty() {
     return Boolean(this._dirty) || Boolean(this._saveTimer);
-  }
-
-  getState() {
-    return this.state;
   }
 
   getSettings() {
@@ -701,6 +727,7 @@ class Store {
   updateNote(id, patch) {
     const note = this.getNote(id);
     if (!note) return null;
+    const textBefore = JSON.stringify([note.title, note.content, note.tags]);
     const allowed = [
       'title',
       'content',
@@ -745,8 +772,10 @@ class Store {
         note[key] = patch[key];
       }
     }
-    note.updatedAt = nowIso();
-    if (patch.title != null || patch.content != null || patch.tags != null) {
+    // Window geometry, visibility, and styling are not edits: only text changes
+    // move a note's "edited" time and its place in the recent list.
+    if (JSON.stringify([note.title, note.content, note.tags]) !== textBefore) {
+      note.updatedAt = nowIso();
       this.touchRecent(id);
     }
     this.saveDeferred();
@@ -807,6 +836,10 @@ class Store {
     } catch (error) {
       this.state = previous;
       this._dirty = wasDirty;
+      // flush() cancelled any pending save; reschedule it, or, when nothing was
+      // pending, the file on disk already matches the restored state.
+      if (wasDirty) this.saveDeferred(SAVE_RETRY_MS);
+      else this._setSaveError(null);
       throw error;
     }
   }

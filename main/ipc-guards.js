@@ -10,6 +10,7 @@ const {
   clamp,
   normalizeTags
 } = require('./store');
+const { normalizeAccelerator } = require('./accelerator');
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.length > 0;
@@ -20,11 +21,6 @@ function requireId(id, label = 'id') {
     throw new Error(`Invalid ${label}`);
   }
   return id;
-}
-
-function optionalId(id, label = 'id') {
-  if (id == null || id === '') return null;
-  return requireId(id, label);
 }
 
 /** Whitelist + clamp fields that renderers may send over IPC. */
@@ -53,7 +49,7 @@ function sanitizeNotePatch(patch) {
     out.bounds = patch.bounds;
   }
   if (patch.displayId !== undefined) {
-    out.displayId = patch.displayId == null ? null : patch.displayId;
+    out.displayId = ['number', 'string'].includes(typeof patch.displayId) ? patch.displayId : null;
   }
   return out;
 }
@@ -72,7 +68,9 @@ function sanitizeCreateOptions(options) {
     out.workspaceId = options.workspaceId;
   }
   if (options.bounds && typeof options.bounds === 'object') out.bounds = options.bounds;
-  if (options.displayId !== undefined) out.displayId = options.displayId;
+  if (options.displayId !== undefined) {
+    out.displayId = ['number', 'string'].includes(typeof options.displayId) ? options.displayId : null;
+  }
   if (options.visible !== undefined) out.visible = Boolean(options.visible);
   return out;
 }
@@ -106,9 +104,8 @@ function sanitizeSettingsPatch(patch) {
     const allowed = Object.keys(defaultShortcuts());
     const next = {};
     for (const key of allowed) {
-      if (typeof patch.shortcuts[key] === 'string' && patch.shortcuts[key].length <= 64) {
-        next[key] = patch.shortcuts[key];
-      }
+      const accel = normalizeAccelerator(patch.shortcuts[key]);
+      if (accel !== null) next[key] = accel;
     }
     if (Object.keys(next).length) out.shortcuts = next;
   }
@@ -161,7 +158,6 @@ function assertSenderIsOneOf(event, windows) {
 
 module.exports = {
   requireId,
-  optionalId,
   sanitizeNotePatch,
   sanitizeCreateOptions,
   sanitizeSettingsPatch,

@@ -64,6 +64,18 @@ describe('ipc guards', () => {
     assert.equal(s.notASetting, undefined);
   });
 
+  it('sanitizeSettingsPatch normalizes shortcuts and allows clearing one', () => {
+    const s = sanitizeSettingsPatch({
+      shortcuts: { newNote: 'shift+ctrl+k', quickCapture: '', hideShowAll: 'Shift+H', toggleManager: 7 }
+    });
+    assert.deepEqual(s.shortcuts, { newNote: 'Control+Shift+K', quickCapture: '' });
+  });
+
+  it('sanitizeNotePatch only keeps primitive display ids', () => {
+    assert.equal(sanitizeNotePatch({ displayId: { evil: true } }).displayId, null);
+    assert.equal(sanitizeNotePatch({ displayId: 42 }).displayId, 42);
+  });
+
   it('sanitizeIdList filters junk', () => {
     assert.deepEqual(sanitizeIdList(['a', '', 3, 'b']), ['a', 'b']);
   });

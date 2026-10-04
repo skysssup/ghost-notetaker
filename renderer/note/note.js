@@ -20,17 +20,25 @@
     btnMono: document.getElementById('btnMono'),
     btnPin: document.getElementById('btnPin'),
     btnGhost: document.getElementById('btnGhost'),
-    btnColor: document.getElementById('btnColor'),
+    btnMore: document.getElementById('btnMore'),
+    morePanel: document.getElementById('morePanel'),
     palette: document.getElementById('palette'),
     opacity: document.getElementById('opacity'),
+    opacityValue: document.getElementById('opacityValue'),
     fontSize: document.getElementById('fontSize'),
+    fontSizeValue: document.getElementById('fontSizeValue'),
     btnNew: document.getElementById('btnNew'),
     btnHide: document.getElementById('btnHide'),
     tagChips: document.getElementById('tagChips'),
     tagInput: document.getElementById('tagInput'),
+    saveStatus: document.getElementById('saveStatus'),
     modeLabel: document.getElementById('modeLabel')
   };
 
+  const SAVE_FAILED = 'Not saved yet. Your text is kept here and saving is retried.';
+  const DISK_FAILED = 'Not written to disk yet. Ghost Notetaker keeps your text and retries.';
+  let localSaveFailed = false;
+  let diskSaveFailed = false;
   let note = null;
   let colors = [];
   let applying = false;
@@ -40,17 +48,38 @@
     return (c && c.hex) || '#c8d6e5';
   }
 
+  function setPressed(btn, on) {
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  }
+
+  function setValuePreservingSelection(input, value) {
+    if (input.value === value) return;
+    const focused = document.activeElement === input;
+    const { selectionStart, selectionEnd } = input;
+    input.value = value;
+    if (focused) {
+      const max = value.length;
+      input.setSelectionRange(Math.min(selectionStart, max), Math.min(selectionEnd, max));
+    }
+  }
+
   function renderTags() {
-    els.tagChips.innerHTML = '';
+    els.tagChips.textContent = '';
     (note.tags || []).forEach((tag) => {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'tag-chip';
-      chip.title = 'Remove tag';
-      chip.innerHTML = `<span>#${escapeHtml(tag)}</span><span class="tag-x">×</span>`;
+      chip.title = `Remove tag #${tag}`;
+      const label = document.createElement('span');
+      label.textContent = `#${tag}`;
+      const x = document.createElement('span');
+      x.className = 'tag-x';
+      x.setAttribute('aria-hidden', 'true');
+      x.textContent = '×';
+      chip.append(label, x);
       chip.addEventListener('click', () => {
         const tags = (note.tags || []).filter((t) => t !== tag);
-        note.tags = tags;
         queueSave({ tags });
         renderTags();
       });
@@ -58,36 +87,37 @@
     });
   }
 
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  function applyStyle() {
+    const opacityPct = Math.round((note.opacity || 0.88) * 100);
+    const fontSize = note.fontSize || 14;
+    els.opacity.value = opacityPct;
+    els.opacityValue.textContent = `${opacityPct}%`;
+    els.fontSize.value = fontSize;
+    els.fontSizeValue.textContent = `${fontSize}px`;
+    els.shell.style.setProperty('--note-tint', colorHex(note.color));
+    els.shell.style.setProperty('--opacity', String(note.opacity || 0.88));
+    els.shell.style.setProperty('--font-size', `${fontSize}px`);
+    els.shell.classList.toggle('mono', Boolean(note.monospace));
+    setPressed(els.btnMono, Boolean(note.monospace));
+    setPressed(els.btnPin, note.pinned !== false);
+    setPressed(els.btnGhost, Boolean(note.clickThrough));
+    for (const swatch of els.palette.children) {
+      swatch.setAttribute('aria-checked', String(swatch.dataset.color === note.color));
+    }
   }
 
-  function applyLocal(n) {
+  /**
+   * Show a note pushed from the main process (e.g. edited in the Notes Manager).
+   * Local edits that have not been saved yet win over the incoming copy, and
+   * the caret stays where it was.
+   */
+  function applyLocal(incoming) {
     applying = true;
-    note = n;
-    els.title.value = n.title || '';
-    els.editor.value = n.content || '';
-    els.opacity.value = Math.round((n.opacity || 0.88) * 100);
-    els.fontSize.value = n.fontSize || 14;
-    els.shell.style.setProperty('--note-tint', colorHex(n.color));
-    els.shell.style.setProperty('--opacity', String(n.opacity || 0.88));
-    els.shell.style.setProperty('--font-size', `${n.fontSize || 14}px`);
-    els.btnColor.style.background = colorHex(n.color);
-    els.shell.classList.toggle('mono', Boolean(n.monospace));
-    els.btnMono.classList.toggle('active', Boolean(n.monospace));
-    els.btnMono.setAttribute('aria-pressed', String(Boolean(n.monospace)));
-    els.btnPin.classList.toggle('active', n.pinned !== false);
-    els.btnPin.setAttribute('aria-pressed', String(n.pinned !== false));
-    els.btnGhost.classList.toggle('active', Boolean(n.clickThrough));
-    els.btnGhost.setAttribute('aria-pressed', String(Boolean(n.clickThrough)));
-    els.btnPreview.classList.toggle('active', Boolean(n.previewMode));
-    els.btnPreview.setAttribute('aria-pressed', String(Boolean(n.previewMode)));
-    els.btnPreview.textContent = n.previewMode ? '✎' : '◈';
-    setPreviewMode(Boolean(n.previewMode));
+    note = { ...incoming, ...(saveQueue.pendingPatch() || {}) };
+    setValuePreservingSelection(els.title, note.title || '');
+    setValuePreservingSelection(els.editor, note.content || '');
+    applyStyle();
+    setPreviewMode(Boolean(note.previewMode));
     renderTags();
     applying = false;
   }
@@ -97,6 +127,11 @@
     els.preview.classList.toggle('hidden', !on);
     els.mdToolbar.classList.toggle('hidden', on);
     els.modeLabel.textContent = on ? 'preview' : 'edit';
+    setPressed(els.btnPreview, on);
+    const label = on ? 'Back to editing' : 'Markdown preview';
+    els.btnPreview.title = label;
+    els.btnPreview.setAttribute('aria-label', label);
+    els.btnPreview.querySelector('use').setAttribute('href', on ? '#i-edit' : '#i-eye');
     if (on) renderPreview();
   }
 
@@ -118,145 +153,147 @@
       a.addEventListener('click', (e) => {
         e.preventDefault();
         const href = a.getAttribute('href');
-        if (href && window.ghostNote.openExternal) {
-          window.ghostNote.openExternal(href);
-        }
+        if (href) window.ghostNote.openExternal(href);
       });
     });
   }
 
-  const saveQueue = (window.GhostSaveQueue || require('./save-queue')).createSaveQueue({
+  let retryTimer = null;
+  const saveQueue = window.GhostSaveQueue.createSaveQueue({
     delayMs: 160,
     flush: async (patch) => {
-      const result = await window.ghostNote.updateNote(noteId, patch);
-      if (result && result.__saveError) {
-        throw new Error(result.__saveError);
+      clearTimeout(retryTimer);
+      try {
+        const result = await window.ghostNote.updateNote(noteId, patch);
+        if (result && result.__saveError) throw new Error(result.__saveError);
+        localSaveFailed = false;
+        renderSaveStatus();
+        return result;
+      } catch (err) {
+        localSaveFailed = true;
+        renderSaveStatus();
+        // The failed patch stays queued; try again shortly even without new typing.
+        retryTimer = setTimeout(() => saveQueue.queue({}), 3000);
+        throw err;
       }
-      return result;
     }
   });
 
   function queueSave(patch) {
-    if (applying) return;
+    if (applying || !note) return;
     Object.assign(note, patch);
     saveQueue.queue(patch);
   }
 
-  function setPaletteOpen(open) {
-    els.palette.classList.toggle('hidden', !open);
-    els.btnColor.setAttribute('aria-expanded', String(open));
+  function renderSaveStatus() {
+    const message = localSaveFailed ? SAVE_FAILED : diskSaveFailed ? DISK_FAILED : '';
+    els.saveStatus.hidden = !message;
+    els.saveStatus.textContent = message;
+    els.shell.classList.toggle('has-error', Boolean(message));
   }
 
+  async function flushNow() {
+    try {
+      await saveQueue.flushNow();
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: err && err.message ? err.message : String(err) };
+    }
+  }
+
+  // Called by the main process (executeJavaScript) before hiding, exporting, or quitting.
+  window.__ghostFlushPending = flushNow;
+
   function buildPalette() {
-    els.palette.innerHTML = '';
+    els.palette.textContent = '';
     colors.forEach((c) => {
       const b = document.createElement('button');
       b.type = 'button';
-      b.setAttribute('role', 'option');
+      b.className = 'swatch';
+      b.dataset.color = c.id;
+      b.setAttribute('role', 'radio');
       b.setAttribute('aria-label', c.label);
       b.style.background = c.hex;
       b.title = c.label;
-      b.classList.toggle('selected', note && note.color === c.id);
-      b.setAttribute('aria-selected', String(Boolean(note && note.color === c.id)));
       b.addEventListener('click', () => {
         queueSave({ color: c.id });
-        els.shell.style.setProperty('--note-tint', c.hex);
-        els.btnColor.style.background = c.hex;
-        setPaletteOpen(false);
-        buildPalette();
+        applyStyle();
       });
       els.palette.appendChild(b);
     });
+  }
+
+  function setMoreOpen(open) {
+    els.morePanel.classList.toggle('hidden', !open);
+    els.btnMore.setAttribute('aria-expanded', String(open));
+    els.shell.classList.toggle('panel-open', open);
+  }
+
+  /** Replace the selection via the editing pipeline so Ctrl/Cmd+Z can undo it. */
+  function replaceRange(start, end, text, selectStart, selectEnd) {
+    const ta = els.editor;
+    ta.focus();
+    ta.setSelectionRange(start, end);
+    if (!document.execCommand('insertText', false, text)) {
+      ta.setRangeText(text, start, end, 'end');
+      queueSave({ content: ta.value });
+    }
+    ta.setSelectionRange(selectStart, selectEnd);
   }
 
   function wrapSelection(before, after, placeholder) {
     const ta = els.editor;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
-    const value = ta.value;
-    const selected = value.slice(start, end) || placeholder || '';
-    const next = value.slice(0, start) + before + selected + after + value.slice(end);
-    ta.value = next;
-    const cursor = start + before.length + selected.length;
-    ta.focus();
-    ta.setSelectionRange(start + before.length, cursor);
-    queueSave({ content: next });
+    const selected = ta.value.slice(start, end) || placeholder || '';
+    replaceRange(
+      start,
+      end,
+      before + selected + after,
+      start + before.length,
+      start + before.length + selected.length
+    );
   }
 
   function prefixLines(prefix) {
     const ta = els.editor;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
     const value = ta.value;
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const lineEnd = value.indexOf('\n', end);
+    const lineStart = value.lastIndexOf('\n', ta.selectionStart - 1) + 1;
+    const lineEnd = value.indexOf('\n', ta.selectionEnd);
     const sliceEnd = lineEnd === -1 ? value.length : lineEnd;
-    const block = value.slice(lineStart, sliceEnd);
-    const nextBlock = block
+    const block = value
+      .slice(lineStart, sliceEnd)
       .split('\n')
       .map((line) => (line.startsWith(prefix) ? line : prefix + line))
       .join('\n');
-    const next = value.slice(0, lineStart) + nextBlock + value.slice(sliceEnd);
-    ta.value = next;
-    ta.focus();
-    ta.setSelectionRange(lineStart, lineStart + nextBlock.length);
-    queueSave({ content: next });
+    replaceRange(lineStart, sliceEnd, block, lineStart, lineStart + block.length);
   }
 
   function insertAtCursor(text) {
     const ta = els.editor;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const value = ta.value;
-    const next = value.slice(0, start) + text + value.slice(end);
-    ta.value = next;
-    const pos = start + text.length;
-    ta.focus();
-    ta.setSelectionRange(pos, pos);
-    queueSave({ content: next });
+    const pos = ta.selectionStart + text.length;
+    replaceRange(ta.selectionStart, ta.selectionEnd, text, pos, pos);
   }
+
+  const MD_ACTIONS = {
+    h2: () => prefixLines('## '),
+    bold: () => wrapSelection('**', '**', 'bold'),
+    italic: () => wrapSelection('*', '*', 'italic'),
+    strike: () => wrapSelection('~~', '~~', 'struck'),
+    code: () => wrapSelection('`', '`', 'code'),
+    link: () => wrapSelection('[', '](https://)', 'label'),
+    ul: () => prefixLines('- '),
+    ol: () => prefixLines('1. '),
+    task: () => prefixLines('- [ ] '),
+    quote: () => prefixLines('> '),
+    hr: () => insertAtCursor('\n---\n')
+  };
 
   els.mdToolbar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-md]');
-    if (!btn || note.previewMode) return;
-    const kind = btn.getAttribute('data-md');
-    switch (kind) {
-      case 'h2':
-        prefixLines('## ');
-        break;
-      case 'bold':
-        wrapSelection('**', '**', 'bold');
-        break;
-      case 'italic':
-        wrapSelection('*', '*', 'italic');
-        break;
-      case 'strike':
-        wrapSelection('~~', '~~', 'struck');
-        break;
-      case 'code':
-        wrapSelection('`', '`', 'code');
-        break;
-      case 'link':
-        wrapSelection('[', '](https://)', 'label');
-        break;
-      case 'ul':
-        prefixLines('- ');
-        break;
-      case 'ol':
-        prefixLines('1. ');
-        break;
-      case 'task':
-        prefixLines('- [ ] ');
-        break;
-      case 'quote':
-        prefixLines('> ');
-        break;
-      case 'hr':
-        insertAtCursor('\n---\n');
-        break;
-      default:
-        break;
-    }
+    if (!btn || !note || note.previewMode) return;
+    const action = MD_ACTIONS[btn.getAttribute('data-md')];
+    if (action) action();
   });
 
   let chromeHover = false;
@@ -266,113 +303,81 @@
     window.ghostNote.chromeHover(noteId, on);
   }
 
-  els.chrome.addEventListener('mouseenter', () => setChromeHover(true));
-  els.chrome.addEventListener('mouseleave', () => setChromeHover(false));
-  els.mdToolbar.addEventListener('mouseenter', () => setChromeHover(true));
-  els.mdToolbar.addEventListener('mouseleave', () => setChromeHover(false));
+  for (const el of [els.chrome, els.mdToolbar]) {
+    el.addEventListener('mouseenter', () => setChromeHover(true));
+    el.addEventListener('mouseleave', () => setChromeHover(false));
+  }
 
   els.title.addEventListener('input', () => queueSave({ title: els.title.value }));
   els.editor.addEventListener('input', () => queueSave({ content: els.editor.value }));
 
   els.opacity.addEventListener('input', () => {
-    const opacity = Number(els.opacity.value) / 100;
-    els.shell.style.setProperty('--opacity', String(opacity));
-    queueSave({ opacity });
+    queueSave({ opacity: Number(els.opacity.value) / 100 });
+    applyStyle();
   });
 
   els.fontSize.addEventListener('input', () => {
-    const fontSize = Number(els.fontSize.value);
-    els.shell.style.setProperty('--font-size', `${fontSize}px`);
-    queueSave({ fontSize });
+    queueSave({ fontSize: Number(els.fontSize.value) });
+    applyStyle();
   });
 
   els.btnPreview.addEventListener('click', () => {
     const previewMode = !note.previewMode;
     queueSave({ previewMode });
     setPreviewMode(previewMode);
-    els.btnPreview.classList.toggle('active', previewMode);
-    els.btnPreview.setAttribute('aria-pressed', String(previewMode));
-    els.btnPreview.textContent = previewMode ? '✎' : '◈';
   });
 
   els.btnMono.addEventListener('click', () => {
-    const monospace = !note.monospace;
-    queueSave({ monospace });
-    els.shell.classList.toggle('mono', monospace);
-    els.btnMono.classList.toggle('active', monospace);
-    els.btnMono.setAttribute('aria-pressed', String(monospace));
+    queueSave({ monospace: !note.monospace });
+    applyStyle();
   });
 
   els.btnPin.addEventListener('click', () => {
-    const pinned = !note.pinned;
-    queueSave({ pinned });
-    els.btnPin.classList.toggle('active', pinned);
-    els.btnPin.setAttribute('aria-pressed', String(pinned));
+    queueSave({ pinned: !note.pinned });
+    applyStyle();
   });
 
   els.btnGhost.addEventListener('click', async () => {
     const clickThrough = !note.clickThrough;
     await window.ghostNote.setClickThrough(noteId, clickThrough);
     note.clickThrough = clickThrough;
-    els.btnGhost.classList.toggle('active', clickThrough);
-    els.btnGhost.setAttribute('aria-pressed', String(clickThrough));
+    applyStyle();
   });
 
-  els.btnColor.addEventListener('click', (e) => {
+  els.btnMore.addEventListener('click', (e) => {
     e.stopPropagation();
-    setPaletteOpen(els.palette.classList.contains('hidden'));
+    setMoreOpen(els.morePanel.classList.contains('hidden'));
   });
 
   document.addEventListener('click', (e) => {
-    if (!els.palette.contains(e.target) && e.target !== els.btnColor) {
-      setPaletteOpen(false);
-    }
+    if (!els.morePanel.contains(e.target) && !els.btnMore.contains(e.target)) setMoreOpen(false);
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !els.palette.classList.contains('hidden')) {
-      setPaletteOpen(false);
-      els.btnColor.focus();
+    if (e.key === 'Escape' && !els.morePanel.classList.contains('hidden')) {
+      setMoreOpen(false);
+      els.btnMore.focus();
     }
   });
 
   els.btnNew.addEventListener('click', () => {
+    setMoreOpen(false);
     window.ghostNote.createNote({ templateId: 'blank' });
   });
 
-  async function flushAndHide() {
+  els.btnHide.addEventListener('click', async () => {
+    const saved = await flushNow();
+    if (!saved.ok) return;
     try {
-      await saveQueue.flushNow();
-      setSaveStatus(null);
-    } catch (err) {
-      setSaveStatus('error', 'Save failed — note kept open so you can retry');
-      return false;
+      await window.ghostNote.hideNote(noteId);
+    } catch (_) {
+      localSaveFailed = true;
+      renderSaveStatus();
     }
-    return window.ghostNote.hideNote(noteId);
-  }
-
-  els.btnHide.addEventListener('click', () => {
-    flushAndHide();
   });
 
-  // Used by main-process quit coordination (executeJavaScript).
-  window.__ghostFlushPending = () =>
-    saveQueue.flushNow().then(
-      () => {
-        setSaveStatus(null);
-        return { ok: true };
-      },
-      (err) => {
-        setSaveStatus('error', 'Save failed — unsaved edits kept');
-        return { ok: false, message: err && err.message ? err.message : String(err) };
-      }
-    );
-
   window.addEventListener('beforeunload', () => {
-    if (saveQueue.hasPending && saveQueue.hasPending()) {
-      // Best-effort; quit path awaits __ghostFlushPending.
-      saveQueue.flushNow().catch(() => {});
-    }
+    if (saveQueue.hasPending()) saveQueue.flushNow().catch(() => {});
   });
 
   function addTagFromInput() {
@@ -381,10 +386,9 @@
       .replace(/^#+/, '')
       .toLowerCase()
       .slice(0, 32);
-    if (!raw) return;
-    const tags = Array.from(new Set([...(note.tags || []).map((x) => String(x).toLowerCase()), raw]));
-    note.tags = tags;
     els.tagInput.value = '';
+    if (!raw) return;
+    const tags = Array.from(new Set([...(note.tags || []), raw]));
     queueSave({ tags });
     renderTags();
   }
@@ -394,9 +398,7 @@
       e.preventDefault();
       addTagFromInput();
     } else if (e.key === 'Backspace' && !els.tagInput.value && (note.tags || []).length) {
-      const tags = note.tags.slice(0, -1);
-      note.tags = tags;
-      queueSave({ tags });
+      queueSave({ tags: note.tags.slice(0, -1) });
       renderTags();
     }
   });
@@ -404,70 +406,54 @@
     if (els.tagInput.value.trim()) addTagFromInput();
   });
 
-  // Keyboard shortcuts for markdown while editing
   els.editor.addEventListener('keydown', (e) => {
-    const mod = e.metaKey || e.ctrlKey;
-    if (!mod) return;
-    if (e.key === 'b') {
-      e.preventDefault();
-      wrapSelection('**', '**', 'bold');
-    } else if (e.key === 'i') {
-      e.preventDefault();
-      wrapSelection('*', '*', 'italic');
-    } else if (e.key === 'k') {
-      e.preventDefault();
-      wrapSelection('[', '](https://)', 'label');
-    }
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+    const action = { b: 'bold', i: 'italic', k: 'link' }[e.key.toLowerCase()];
+    if (!action) return;
+    e.preventDefault();
+    MD_ACTIONS[action]();
   });
 
   window.ghostNote.onUpdated((n) => {
-    if (n && n.id === noteId) applyLocal(n);
+    if (n && n.id === noteId && note) applyLocal(n);
   });
+
+  window.ghostNote.onSaveState((state) => {
+    diskSaveFailed = !state.ok;
+    renderSaveStatus();
+  });
+
+  function showSafeError(title, detail) {
+    const box = document.createElement('div');
+    box.setAttribute('role', 'alert');
+    box.className = 'load-error';
+    const h = document.createElement('h1');
+    h.textContent = title;
+    const p = document.createElement('p');
+    p.textContent = String(detail || 'Something went wrong.').slice(0, 400);
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'Your notes file was not modified by this window.';
+    box.append(h, p, hint);
+    document.body.replaceChildren(box);
+  }
 
   async function init() {
     const boot = await window.ghostNote.getBootstrap();
     colors = boot.colors || [];
+    buildPalette();
+    diskSaveFailed = Boolean(boot.saveError);
+    renderSaveStatus();
+    if (!boot.capabilities.clickThroughHover) {
+      els.btnGhost.title =
+        'Click-through: clicks pass through this note. On Linux, turn it off from the Notes Manager or the tray menu.';
+    }
     const n = await window.ghostNote.getNote(noteId);
     if (!n) {
-      showSafeError('Note not found', 'This note id is missing from the local store.');
+      showSafeError('Note not found', 'This note is missing from the notes file.');
       return;
     }
     applyLocal(n);
-    buildPalette();
-  }
-
-  function showSafeError(title, detail) {
-    const safeDetail = String(detail || 'Something went wrong.')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .slice(0, 400);
-    document.body.innerHTML =
-      '<div role="alert" style="font-family:system-ui,sans-serif;padding:24px;max-width:28rem;line-height:1.45">' +
-      '<h1 style="font-size:1.1rem;margin:0 0 8px">' +
-      String(title || 'Error').replace(/</g, '&lt;') +
-      '</h1><p style="margin:0;opacity:.85;white-space:pre-wrap">' +
-      safeDetail +
-      '</p><p style="margin:12px 0 0;opacity:.65;font-size:.85rem">Your notes file was not modified by this panel.</p></div>';
-  }
-
-  function setSaveStatus(kind, message) {
-    let el = document.getElementById('saveStatus');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'saveStatus';
-      el.setAttribute('role', 'status');
-      el.style.cssText =
-        'position:absolute;left:10px;bottom:28px;z-index:5;font-size:11px;padding:4px 8px;border-radius:6px;background:rgba(0,0,0,.55);color:#fff;max-width:80%;';
-      (els.shell || document.body).appendChild(el);
-    }
-    if (!kind) {
-      el.hidden = true;
-      el.textContent = '';
-      return;
-    }
-    el.hidden = false;
-    el.textContent = message || (kind === 'error' ? 'Save failed — edits kept locally' : 'Saving…');
-    el.style.background = kind === 'error' ? 'rgba(140,20,20,.85)' : 'rgba(0,0,0,.55)';
   }
 
   init().catch((err) => {

@@ -5,9 +5,13 @@ const { BrowserWindow } = require('electron');
 const { applyContentProtection, isMac } = require('./platform');
 
 class ManagerWindowController {
-  constructor({ attachShortcuts }) {
+  constructor({ attachShortcuts, isContentProtected, onClosed }) {
     this.attachShortcuts = attachShortcuts || (() => {});
+    this.isContentProtected = isContentProtected || (() => true);
+    this.onClosed = onClosed || (() => {});
     this.win = null;
+    this._loaded = false;
+    this._queue = [];
   }
 
   open() {
@@ -18,13 +22,13 @@ class ManagerWindowController {
     }
 
     this.win = new BrowserWindow({
-      width: 920,
-      height: 640,
-      minWidth: 720,
-      minHeight: 480,
+      width: 1040,
+      height: 700,
+      minWidth: 760,
+      minHeight: 500,
       show: false,
       title: 'Ghost Notetaker — Notes Manager',
-      backgroundColor: '#1a1d27',
+      backgroundColor: '#12141c',
       autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, '..', 'renderer', 'manager', 'preload.js'),
@@ -33,37 +37,48 @@ class ManagerWindowController {
         sandbox: true
       }
     });
+    const win = this.win;
+    this._loaded = false;
 
     if (isMac()) {
       try {
-        this.win.setWindowButtonVisibility(true);
+        win.setWindowButtonVisibility(true);
       } catch (_) {
         /* ignore */
       }
     }
 
-    applyContentProtection(this.win, true);
-    this.win.loadFile(path.join(__dirname, '..', 'renderer', 'manager', 'manager.html'));
-    this.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    this.win.webContents.on('will-navigate', (event, url) => {
-      if (!url.startsWith('file:')) event.preventDefault();
+    applyContentProtection(win, this.isContentProtected());
+    win.loadFile(path.join(__dirname, '..', 'renderer', 'manager', 'manager.html'));
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    win.webContents.on('will-navigate', (event) => event.preventDefault());
+    win.webContents.on('did-finish-load', () => {
+      this._loaded = true;
+      for (const [channel, payload] of this._queue.splice(0)) {
+        win.webContents.send(channel, payload);
+      }
     });
-    this.attachShortcuts(this.win);
+    this.attachShortcuts(win);
 
-    this.win.once('ready-to-show', () => {
-      applyContentProtection(this.win, true);
-      this.win.show();
+    win.once('ready-to-show', () => {
+      applyContentProtection(win, this.isContentProtected());
+      win.show();
     });
 
-    this.win.on('closed', () => {
-      this.win = null;
+    win.on('closed', () => {
+      if (this.win === win) {
+        this.win = null;
+        this._loaded = false;
+        this._queue = [];
+      }
+      this.onClosed();
     });
 
-    return this.win;
+    return win;
   }
 
   toggle() {
-    if (this.win && !this.win.isDestroyed() && this.win.isVisible()) {
+    if (this.win && !this.win.isDestroyed() && this.win.isVisible() && this.win.isFocused()) {
       this.win.hide();
       return;
     }
@@ -71,22 +86,21 @@ class ManagerWindowController {
   }
 
   refresh() {
-    if (this.win && !this.win.isDestroyed()) {
-      this.win.webContents.send('manager:refresh');
-    }
+    this.send('manager:refresh');
   }
 
+  reapplyContentProtection() {
+    if (this.win && !this.win.isDestroyed()) applyContentProtection(this.win, this.isContentProtected());
+  }
+
+  /** Send to the manager renderer, queueing until a freshly opened window has loaded. */
   send(channel, payload) {
-    if (this.win && !this.win.isDestroyed()) {
-      this.win.webContents.send(channel, payload);
+    if (!this.win || this.win.isDestroyed()) return;
+    if (!this._loaded) {
+      if (channel !== 'manager:refresh') this._queue.push([channel, payload]);
+      return;
     }
-  }
-
-  destroy() {
-    if (this.win && !this.win.isDestroyed()) {
-      this.win.destroy();
-    }
-    this.win = null;
+    this.win.webContents.send(channel, payload);
   }
 }
 

@@ -2,6 +2,14 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+function subscribe(channel) {
+  return (cb) => {
+    const h = () => cb();
+    ipcRenderer.on(channel, h);
+    return () => ipcRenderer.removeListener(channel, h);
+  };
+}
+
 contextBridge.exposeInMainWorld('ghostManager', {
   getBootstrap: () => ipcRenderer.invoke('store:getBootstrap'),
   listNotes: (filter) => ipcRenderer.invoke('notes:list', filter),
@@ -23,21 +31,17 @@ contextBridge.exposeInMainWorld('ghostManager', {
   exportAll: () => ipcRenderer.invoke('data:exportAll'),
   importAll: (mode) => ipcRenderer.invoke('data:importAll', mode),
   listShortcuts: () => ipcRenderer.invoke('shortcuts:list'),
-  getSettings: () => ipcRenderer.invoke('settings:get'),
+  setShortcut: (id, accelerator) => ipcRenderer.invoke('shortcuts:set', id, accelerator),
+  resetShortcuts: () => ipcRenderer.invoke('shortcuts:reset'),
+  pauseShortcuts: (paused) => ipcRenderer.invoke('shortcuts:pause', paused),
   updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
-  onRefresh: (cb) => {
-    const h = () => cb();
-    ipcRenderer.on('manager:refresh', h);
-    return () => ipcRenderer.removeListener('manager:refresh', h);
+  revealDataFile: () => ipcRenderer.invoke('app:revealDataFile'),
+  onSaveState: (cb) => {
+    const h = (_e, state) => cb(state);
+    ipcRenderer.on('app:saveState', h);
+    return () => ipcRenderer.removeListener('app:saveState', h);
   },
-  onShowShortcuts: (cb) => {
-    const h = () => cb();
-    ipcRenderer.on('manager:showShortcuts', h);
-    return () => ipcRenderer.removeListener('manager:showShortcuts', h);
-  },
-  onShowSettings: (cb) => {
-    const h = () => cb();
-    ipcRenderer.on('manager:showSettings', h);
-    return () => ipcRenderer.removeListener('manager:showSettings', h);
-  }
+  onRefresh: subscribe('manager:refresh'),
+  onShowShortcuts: subscribe('manager:showShortcuts'),
+  onShowSettings: subscribe('manager:showSettings')
 });

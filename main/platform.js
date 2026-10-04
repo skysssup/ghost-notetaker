@@ -10,8 +10,18 @@ function isWin() {
   return process.platform === 'win32';
 }
 
-function isLinux() {
-  return process.platform === 'linux';
+/**
+ * What the current OS actually supports. Electron implements content
+ * protection, login items, and mouse-move forwarding for click-through windows
+ * only on macOS and Windows; on Linux these calls are silent no-ops.
+ */
+function capabilities() {
+  const native = isMac() || isWin();
+  return {
+    contentProtection: native,
+    launchAtLogin: native,
+    clickThroughHover: native
+  };
 }
 
 function hideDockIcon() {
@@ -22,18 +32,6 @@ function hideDockIcon() {
       /* dock may be unavailable in some environments */
     }
   }
-}
-
-function acceleratorLabel(accel) {
-  if (!accel) return '';
-  const isDarwin = isMac();
-  return String(accel)
-    .replace(/CommandOrControl/g, isDarwin ? '⌘' : 'Ctrl')
-    .replace(/Command/g, '⌘')
-    .replace(/Control/g, isDarwin ? '⌃' : 'Ctrl')
-    .replace(/Alt/g, isDarwin ? '⌥' : 'Alt')
-    .replace(/Shift/g, isDarwin ? '⇧' : 'Shift')
-    .replace(/\+/g, isDarwin ? '' : '+');
 }
 
 function noteWindowOptions(bounds) {
@@ -118,37 +116,32 @@ function applyClickThrough(win, enabled, forward = true) {
 }
 
 function applyLaunchAtLogin(enabled) {
+  if (!capabilities().launchAtLogin) return false;
   try {
-    if (typeof app.setLoginItemSettings === 'function') {
-      app.setLoginItemSettings({
-        openAtLogin: Boolean(enabled),
-        openAsHidden: true
-      });
-      return true;
-    }
+    app.setLoginItemSettings({
+      openAtLogin: Boolean(enabled),
+      openAsHidden: true
+    });
+    return true;
   } catch (_) {
-    /* unsupported */
+    return false;
   }
-  return false;
 }
 
 function getLaunchAtLogin() {
+  if (!capabilities().launchAtLogin) return false;
   try {
-    if (typeof app.getLoginItemSettings === 'function') {
-      return Boolean(app.getLoginItemSettings().openAtLogin);
-    }
+    return Boolean(app.getLoginItemSettings().openAtLogin);
   } catch (_) {
-    /* unsupported */
+    return false;
   }
-  return false;
 }
 
 module.exports = {
   isMac,
   isWin,
-  isLinux,
+  capabilities,
   hideDockIcon,
-  acceleratorLabel,
   noteWindowOptions,
   applyAlwaysOnTop,
   applyContentProtection,

@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const {
   noteWindowOptions,
   applyAlwaysOnTop,
@@ -10,6 +10,9 @@ const {
   isWin
 } = require('./platform');
 const { clampBoundsToDisplays } = require('./display');
+
+const FLUSH_SCRIPT =
+  'typeof window.__ghostFlushPending === "function" ? window.__ghostFlushPending() : ({ ok: true })';
 
 class NoteWindowController {
   constructor({ store, onChanged, attachShortcuts }) {
@@ -30,8 +33,13 @@ class NoteWindowController {
   }
 
   _contentProtectionEnabled() {
-    const s = this.store.getSettings();
-    return s.contentProtection !== false;
+    return this.store.getSettings().contentProtection !== false;
+  }
+
+  _boundsPatch(win) {
+    const bounds = win.getBounds();
+    const display = screen.getDisplayMatching(bounds);
+    return { bounds, displayId: display ? display.id : null };
   }
 
   async open(noteId) {
@@ -72,17 +80,14 @@ class NoteWindowController {
 
     applyContentProtection(win, this._contentProtectionEnabled());
     applyAlwaysOnTop(win, note.pinned);
-    win.setOpacity(1);
 
     win.loadFile(path.join(__dirname, '..', 'renderer', 'note', 'note.html'), {
       query: { id: noteId }
     });
 
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    win.webContents.on('will-navigate', (event, url) => {
-      // Stay on the local note page; never follow in-window navigations.
-      if (!url.startsWith('file:')) event.preventDefault();
-    });
+    // The note page is loaded once; links and dropped files must never replace it.
+    win.webContents.on('will-navigate', (event) => event.preventDefault());
 
     this.attachShortcuts(win);
 
@@ -103,90 +108,104 @@ class NoteWindowController {
       if (isWin()) applyContentProtection(win, this._contentProtectionEnabled());
     });
 
-    win.on('hide', () => {
-      /* content protection re-applied on next show (Windows) */
-    });
-
+    // 'moved'/'resized' only exist on macOS and Windows; 'move'/'resize' fire
+    // everywhere (continuously while dragging), so persist once they settle.
+    let boundsTimer = null;
     const persistBounds = () => {
-      if (win.isDestroyed()) return;
-      const b = win.getBounds();
-      const display = require('electron').screen.getDisplayMatching(b);
-      this.store.updateNote(noteId, {
-        bounds: b,
-        displayId: display ? display.id : null
-      });
+      clearTimeout(boundsTimer);
+      boundsTimer = setTimeout(() => {
+        if (!win.isDestroyed()) this.store.updateNote(noteId, this._boundsPatch(win));
+      }, 300);
     };
-
-    win.on('moved', persistBounds);
-    win.on('resized', persistBounds);
+    win.on('move', persistBounds);
+    win.on('resize', persistBounds);
 
     win.on('close', (e) => {
-      // Close hides — never destroy from the window chrome
+      // Closing from the OS (Alt+F4, window menu) hides the note; it is never deleted here.
       e.preventDefault();
       this.hide(noteId);
     });
 
     win.on('closed', () => {
-      this.windows.delete(noteId);
+      clearTimeout(boundsTimer);
+      if (this.windows.get(noteId) === win) this.windows.delete(noteId);
       this.onChanged();
     });
 
     return win;
   }
 
-  hide(noteId) {
-    const win = this.windows.get(noteId);
-    this.store.updateNote(noteId, { visible: false });
-    if (win && !win.isDestroyed()) {
-      win.hide();
-      // Destroy to free resources; reopen recreates
-      win.destroy();
-    }
-    this.windows.delete(noteId);
-    this.onChanged();
-  }
-
-  closeAndDestroy(noteId) {
-    const win = this.windows.get(noteId);
-    if (win && !win.isDestroyed()) {
-      win.removeAllListeners('close');
-      win.destroy();
-    }
-    this.windows.delete(noteId);
-  }
-
-  destroyAll() {
-    for (const id of Array.from(this.windows.keys())) {
-      this.closeAndDestroy(id);
+  /** Ask a note renderer to save its debounced edits. Resolves to { ok, message? }. */
+  async flushWindow(win, timeoutMs = 2000) {
+    if (!win || win.isDestroyed() || win.webContents.isCrashed()) return { ok: true };
+    let timer = null;
+    try {
+      const result = await Promise.race([
+        win.webContents.executeJavaScript(FLUSH_SCRIPT, true),
+        new Promise((resolve) => {
+          timer = setTimeout(
+            () => resolve({ ok: false, message: 'Timed out waiting for the note to save' }),
+            timeoutMs
+          );
+        })
+      ]);
+      return result && typeof result === 'object' ? result : { ok: true };
+    } catch (err) {
+      if (win.isDestroyed()) return { ok: true };
+      return { ok: false, message: err && err.message ? err.message : String(err) };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
   /**
-   * Ask each open note renderer to flush debounced edits before quit/hide-all.
-   * Returns per-window results; failed flushes keep dirty state in the renderer.
+   * Hide a note window after its pending edits are saved. If saving fails the
+   * window stays open (the note shows the error) so nothing typed is lost.
    */
-  async flushAllPending(timeoutMs = 1500) {
+  async hide(noteId) {
+    const win = this.windows.get(noteId);
+    if (!win || win.isDestroyed()) {
+      this.windows.delete(noteId);
+      this.store.updateNote(noteId, { visible: false });
+      this.onChanged();
+      return { id: noteId, ok: true };
+    }
+    const flushed = await this.flushWindow(win);
+    if (!flushed.ok) return { id: noteId, ok: false, message: flushed.message };
+    if (win.isDestroyed()) return { id: noteId, ok: true };
+    this.store.updateNote(noteId, { visible: false, ...this._boundsPatch(win) });
+    this.windows.delete(noteId);
+    win.destroy();
+    this.onChanged();
+    return { id: noteId, ok: true };
+  }
+
+  async hideAll() {
+    const results = [];
+    for (const id of this.listOpenIds()) results.push(await this.hide(id));
+    return results;
+  }
+
+  /** Destroy a window without saving it (the note is being deleted or replaced). */
+  closeAndDestroy(noteId) {
+    const win = this.windows.get(noteId);
+    this.windows.delete(noteId);
+    if (win && !win.isDestroyed()) win.destroy();
+  }
+
+  /** Destroy every window; with persistBounds, record final positions first (quit). */
+  destroyAll({ persistBounds = false } = {}) {
+    for (const [id, win] of Array.from(this.windows.entries())) {
+      if (persistBounds && !win.isDestroyed()) this.store.updateNote(id, this._boundsPatch(win));
+      this.closeAndDestroy(id);
+    }
+  }
+
+  /** Flush every open note renderer. Returns per-window { id, ok, message? }. */
+  async flushAllPending(timeoutMs = 2000) {
     const results = [];
     for (const [id, win] of Array.from(this.windows.entries())) {
-      if (!win || win.isDestroyed()) continue;
-      try {
-        const result = await Promise.race([
-          win.webContents.executeJavaScript(
-            'typeof window.__ghostFlushPending === "function" ? window.__ghostFlushPending() : ({ ok: true })',
-            true
-          ),
-          new Promise((resolve) =>
-            setTimeout(() => resolve({ ok: false, message: 'flush timeout' }), timeoutMs)
-          )
-        ]);
-        results.push({ id, ...(result && typeof result === 'object' ? result : { ok: true }) });
-      } catch (err) {
-        results.push({
-          id,
-          ok: false,
-          message: err && err.message ? err.message : String(err)
-        });
-      }
+      results.push({ id, ...(await this.flushWindow(win, timeoutMs)) });
     }
     return results;
   }
@@ -198,17 +217,12 @@ class NoteWindowController {
     }
   }
 
-  hideAll() {
-    const ids = Array.from(this.windows.keys());
-    for (const id of ids) this.hide(id);
-  }
-
   async toggleHideShowAll() {
     const open = this.listOpenIds();
     if (open.length > 0) {
       this._lastHiddenBatch = open.slice();
-      this.hideAll();
-      return 'hidden';
+      const results = await this.hideAll();
+      return { action: 'hidden', failed: results.filter((r) => !r.ok) };
     }
     const batch = Array.isArray(this._lastHiddenBatch) ? this._lastHiddenBatch : [];
     this._lastHiddenBatch = [];
@@ -219,7 +233,7 @@ class NoteWindowController {
           await this.open(id);
         }
       }
-      return 'shown';
+      return { action: 'shown', failed: [] };
     }
     const notes = this.store.listNotes({
       workspaceId: this.store.getActiveWorkspaceId()
@@ -232,22 +246,25 @@ class NoteWindowController {
     } else {
       for (const n of toOpen) await this.open(n.id);
     }
-    return 'shown';
+    return { action: 'shown', failed: [] };
   }
 
-  applyNoteAppearance(noteId) {
+  /**
+   * Re-apply window state for a note. `notifyRenderer: false` skips echoing the
+   * note back to its own window when the change came from that window.
+   */
+  applyNoteAppearance(noteId, { notifyRenderer = true } = {}) {
     const note = this.store.getNote(noteId);
     const win = this.windows.get(noteId);
     if (!note || !win || win.isDestroyed()) return;
     applyAlwaysOnTop(win, note.pinned);
     this._syncClickThrough(win, note);
-    win.webContents.send('note:updated', note);
+    if (notifyRenderer) win.webContents.send('note:updated', note);
   }
 
   _syncClickThrough(win, note) {
     const global = this.store.getSettings().globalClickThrough;
-    const enabled = global || note.clickThrough;
-    applyClickThrough(win, enabled, true);
+    applyClickThrough(win, global || note.clickThrough, true);
   }
 
   setGlobalClickThrough(enabled) {
@@ -265,12 +282,6 @@ class NoteWindowController {
     return next;
   }
 
-  broadcast(channel, payload) {
-    for (const win of this.windows.values()) {
-      if (!win.isDestroyed()) win.webContents.send(channel, payload);
-    }
-  }
-
   reapplyContentProtection() {
     const enabled = this._contentProtectionEnabled();
     for (const win of this.windows.values()) {
@@ -284,21 +295,9 @@ class NoteWindowController {
       const note = this.store.getNote(id);
       if (!note) continue;
       const clamped = clampBoundsToDisplays(win.getBounds(), note.displayId);
-      win.setBounds({
-        x: clamped.x,
-        y: clamped.y,
-        width: clamped.width,
-        height: clamped.height
-      });
-      this.store.updateNote(id, {
-        bounds: {
-          x: clamped.x,
-          y: clamped.y,
-          width: clamped.width,
-          height: clamped.height
-        },
-        displayId: clamped.displayId
-      });
+      const bounds = { x: clamped.x, y: clamped.y, width: clamped.width, height: clamped.height };
+      win.setBounds(bounds);
+      this.store.updateNote(id, { bounds, displayId: clamped.displayId });
     }
   }
 }

@@ -1,10 +1,11 @@
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 const { app, ipcMain, dialog, clipboard, screen, Menu, BrowserWindow, shell } = require('electron');
 
 const { flushPendingNotes } = require('./persistence');
-const { Store, NOTE_COLORS, TEMPLATES } = require('./store');
+const { Store, NOTE_COLORS, TEMPLATES, defaultShortcuts } = require('./store');
 const {
   requireId,
   sanitizeNotePatch,
@@ -17,10 +18,13 @@ const {
 const {
   hideDockIcon,
   isMac,
+  capabilities,
+  applyClickThrough,
   applyLaunchAtLogin,
   getLaunchAtLogin
 } = require('./platform');
 const { cursorNearbyBounds } = require('./display');
+const { normalizeAccelerator, formatAccelerator, SHORTCUT_ACTIONS } = require('./accelerator');
 const { ShortcutController } = require('./shortcuts');
 const { NoteWindowController } = require('./note-window');
 const { ManagerWindowController } = require('./manager-window');
@@ -31,8 +35,8 @@ let notes;
 let manager;
 let shortcuts;
 let trayApi;
-let quitting = false;
 let allowQuit = false;
+let quitInProgress = false;
 
 function ownedWindows() {
   const list = [];
@@ -45,13 +49,8 @@ function ownedWindows() {
   return list;
 }
 
-function assertFromApp(event) {
-  return assertSenderIsOneOf(event, ownedWindows());
-}
-
 function assertFromNote(event, noteId) {
-  const win = notes ? notes.get(noteId) : null;
-  return assertSenderWindow(event, win);
+  return assertSenderWindow(event, notes ? notes.get(noteId) : null);
 }
 
 function assertFromManagerOrNote(event, noteId) {
@@ -65,8 +64,24 @@ function assertFromManagerOrNote(event, noteId) {
   throw new Error('Unauthorized IPC sender');
 }
 
+/** Every IPC channel only answers windows this app created. */
+function handle(channel, fn) {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertSenderIsOneOf(event, ownedWindows());
+    return fn(event, ...args);
+  });
+}
+
+if (process.platform === 'linux') {
+  // Chromium's spellchecker on Linux downloads Hunspell dictionaries from
+  // Google's servers. Load none so the app never goes online by itself.
+  // (macOS and Windows use the operating system's spellchecker.)
+  app.on('session-created', (ses) => ses.setSpellCheckerLanguages([]));
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  allowQuit = true;
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -78,13 +93,38 @@ function storePath() {
   return path.join(app.getPath('userData'), 'ghost-notetaker-data.json');
 }
 
-function refreshManagerAndTray() {
-  if (manager) manager.refresh();
-  if (trayApi) trayApi.rebuild();
+function logError(err) {
+  console.error(err);
 }
 
-function syncLoginItem(enabled) {
-  applyLaunchAtLogin(Boolean(enabled));
+/** Tell every window whether the notes file is currently being written. */
+function broadcastSaveState(state) {
+  for (const win of ownedWindows()) win.webContents.send('app:saveState', state);
+}
+
+let refreshTimer = null;
+function refreshManagerAndTray() {
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    if (manager) manager.refresh();
+    if (trayApi) trayApi.rebuild();
+  }, 60);
+}
+
+function safeFileName(name) {
+  const cleaned = String(name || '')
+    .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s.-]+|[\s.-]+$/g, '')
+    .slice(0, 80);
+  return cleaned || 'note';
+}
+
+function setContentProtection(enabled) {
+  store.updateSettings({ contentProtection: Boolean(enabled) });
+  notes.reapplyContentProtection();
+  manager.reapplyContentProtection();
 }
 
 async function createNote(options = {}) {
@@ -120,8 +160,9 @@ async function quickCapture() {
 }
 
 async function hideAllNotes() {
-  notes.hideAll();
+  const results = await notes.hideAll();
   refreshManagerAndTray();
+  return results;
 }
 
 async function showAllNotes() {
@@ -133,64 +174,87 @@ async function showAllNotes() {
   refreshManagerAndTray();
 }
 
+function togglePreviewOfFocusedNote() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (!focused) return;
+  for (const [id, win] of notes.windows) {
+    if (win !== focused) continue;
+    const note = store.getNote(id);
+    if (note) {
+      store.updateNote(id, { previewMode: !note.previewMode });
+      notes.applyNoteAppearance(id);
+      refreshManagerAndTray();
+    }
+    return;
+  }
+}
+
 function handleShortcutAction(action) {
-  switch (action) {
-    case 'newNote':
-    case 'recoveryNewNote':
-      createNote();
-      break;
-    case 'toggleManager':
-      manager.toggle();
-      break;
-    case 'hideShowAll':
-      notes.toggleHideShowAll().then(() => refreshManagerAndTray());
-      break;
-    case 'toggleClickThrough':
+  const run = {
+    newNote: () => createNote(),
+    recoveryNewNote: () => createNote(),
+    toggleManager: () => manager.toggle(),
+    hideShowAll: () => notes.toggleHideShowAll().then(refreshManagerAndTray),
+    toggleClickThrough: () => {
       notes.toggleGlobalClickThrough();
       refreshManagerAndTray();
-      break;
-    case 'togglePreview': {
-      const focused = BrowserWindow.getFocusedWindow();
-      if (!focused) break;
-      for (const [id, win] of notes.windows) {
-        if (win === focused) {
-          const note = store.getNote(id);
-          if (note) {
-            store.updateNote(id, { previewMode: !note.previewMode });
-            notes.applyNoteAppearance(id);
-            refreshManagerAndTray();
-          }
-          break;
-        }
-      }
-      break;
+    },
+    togglePreview: togglePreviewOfFocusedNote,
+    quickCapture: () => quickCapture()
+  }[action];
+  if (run) Promise.resolve().then(run).catch(logError);
+}
+
+/** Reject a patch that gives an action a binding another action already uses. */
+function assertNoShortcutConflict(patch) {
+  const merged = { ...defaultShortcuts(), ...store.getSettings().shortcuts, ...patch };
+  for (const [id, value] of Object.entries(patch)) {
+    const accel = normalizeAccelerator(value);
+    if (!accel) continue;
+    const other = SHORTCUT_ACTIONS.find(
+      (a) => a.id !== id && normalizeAccelerator(merged[a.id]) === accel
+    );
+    if (other) {
+      throw new Error(`${formatAccelerator(accel)} is already used for "${other.label}".`);
     }
-    case 'quickCapture':
-      quickCapture();
-      break;
-    default:
-      break;
+  }
+}
+
+function applyShortcutBindings(patch) {
+  assertNoShortcutConflict(patch);
+  store.updateSettings({ shortcuts: patch });
+  const list = shortcuts.registerGlobal();
+  refreshManagerAndTray();
+  return list;
+}
+
+function dialogParent(event) {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return win && !win.isDestroyed() ? win : undefined;
+}
+
+async function flushNoteOrThrow(noteId, action) {
+  const result = await notes.flushWindow(notes.get(noteId));
+  if (!result.ok) {
+    throw new Error(`Could not save the note before ${action}: ${result.message || 'save failed'}`);
   }
 }
 
 function registerIpc() {
-  ipcMain.handle('store:getBootstrap', () => {
-    return {
-      colors: NOTE_COLORS,
-      templates: Object.values(TEMPLATES).map((t) => ({
-        id: t.id,
-        label: t.label
-      })),
-      settings: store.getSettings(),
-      workspaces: store.listWorkspaces(),
-      activeWorkspaceId: store.getActiveWorkspaceId(),
-      platform: process.platform,
-      version: app.getVersion(),
-      launchAtLoginSupported: typeof app.setLoginItemSettings === 'function'
-    };
-  });
+  handle('store:getBootstrap', () => ({
+    colors: NOTE_COLORS,
+    templates: Object.values(TEMPLATES).map((t) => ({ id: t.id, label: t.label })),
+    settings: store.getSettings(),
+    workspaces: store.listWorkspaces(),
+    activeWorkspaceId: store.getActiveWorkspaceId(),
+    platform: process.platform,
+    version: app.getVersion(),
+    capabilities: capabilities(),
+    dataFile: storePath(),
+    saveError: store.getLastSaveError() ? store.getLastSaveError().message : null
+  }));
 
-  ipcMain.handle('notes:list', (_e, filter) => {
+  handle('notes:list', (_e, filter) => {
     const f = filter && typeof filter === 'object' ? filter : {};
     const safe = {};
     if (typeof f.workspaceId === 'string') safe.workspaceId = f.workspaceId;
@@ -200,62 +264,54 @@ function registerIpc() {
     if (typeof f.sortBy === 'string') safe.sortBy = f.sortBy;
     return store.listNotes(safe);
   });
-  ipcMain.handle('notes:get', (_e, id) => store.getNote(requireId(id, 'noteId')));
-  ipcMain.handle('notes:tags', (_e, workspaceId) =>
+  handle('notes:get', (_e, id) => store.getNote(requireId(id, 'noteId')));
+  handle('notes:tags', (_e, workspaceId) =>
     store.allTags(typeof workspaceId === 'string' ? workspaceId : undefined)
   );
-  ipcMain.handle('notes:recent', (_e, limit) => {
+  handle('notes:recent', (_e, limit) => {
     const n = Number(limit);
     return store.recentNotes(Number.isFinite(n) ? Math.min(24, Math.max(1, n)) : 8);
   });
 
-  ipcMain.handle('notes:create', async (e, options) => {
-    assertFromApp(e);
-    const note = await createNote(sanitizeCreateOptions(options));
+  handle('notes:create', (_e, options) => createNote(sanitizeCreateOptions(options)));
+
+  handle('notes:update', (e, id, patch) => {
+    const noteId = requireId(id, 'noteId');
+    const sender = assertFromManagerOrNote(e, noteId);
+    if (store.isSaveBlocked()) {
+      return { __saveError: 'Store recovery required before saving' };
+    }
+    const note = store.updateNote(noteId, sanitizeNotePatch(patch));
+    if (!note) return { __saveError: 'This note no longer exists' };
+    // The note window already shows its own edits; echoing them back could
+    // overwrite keystrokes typed while this request was in flight.
+    notes.applyNoteAppearance(noteId, { notifyRenderer: sender !== notes.get(noteId) });
+    refreshManagerAndTray();
+    // Disk write failures are reported separately through 'app:saveState'.
     return note;
   });
 
-  ipcMain.handle('notes:update', (e, id, patch) => {
+  handle('notes:hide', async (e, id) => {
     const noteId = requireId(id, 'noteId');
     assertFromManagerOrNote(e, noteId);
-    if (store.isSaveBlocked && store.isSaveBlocked()) {
-      return { __saveError: 'Store recovery required before saving' };
-    }
-    try {
-      const note = store.updateNote(noteId, sanitizeNotePatch(patch));
-      if (note) {
-        notes.applyNoteAppearance(noteId);
-        refreshManagerAndTray();
-      }
-      const saveErr = store.getLastSaveError && store.getLastSaveError();
-      if (saveErr) {
-        return { ...(note || {}), __saveError: saveErr.message || String(saveErr) };
-      }
-      return note;
-    } catch (err) {
-      return { __saveError: err && err.message ? err.message : String(err) };
-    }
-  });
-
-  ipcMain.handle('notes:hide', (e, id) => {
-    const noteId = requireId(id, 'noteId');
-    assertFromManagerOrNote(e, noteId);
-    notes.hide(noteId);
+    const result = await notes.hide(noteId);
     refreshManagerAndTray();
+    if (!result.ok) {
+      throw new Error(`Could not save the note before hiding it: ${result.message || 'save failed'}`);
+    }
     return true;
   });
 
-  ipcMain.handle('notes:open', async (e, id) => {
-    assertFromApp(e);
+  handle('notes:open', async (_e, id) => {
     const noteId = requireId(id, 'noteId');
+    if (!store.getNote(noteId)) return null;
     store.updateNote(noteId, { visible: true });
     await notes.open(noteId);
     refreshManagerAndTray();
     return store.getNote(noteId);
   });
 
-  ipcMain.handle('notes:delete', async (e, id) => {
-    assertFromApp(e);
+  handle('notes:delete', (_e, id) => {
     const noteId = requireId(id, 'noteId');
     notes.closeAndDestroy(noteId);
     const ok = store.deleteNote(noteId);
@@ -263,109 +319,114 @@ function registerIpc() {
     return ok;
   });
 
-  ipcMain.handle('notes:duplicate', async (_e, id) => {
-    const note = store.duplicateNote(requireId(id, 'noteId'));
-    if (note) {
-      await notes.open(note.id);
-      refreshManagerAndTray();
-    }
+  handle('notes:duplicate', async (_e, id) => {
+    const noteId = requireId(id, 'noteId');
+    await flushNoteOrThrow(noteId, 'duplicating it');
+    const note = store.duplicateNote(noteId);
+    if (note) await notes.open(note.id);
+    refreshManagerAndTray();
     return note;
   });
 
-  ipcMain.handle('notes:bulkVisible', async (_e, ids, visible) => {
-    const list = sanitizeIdList(ids);
-    const show = Boolean(visible);
+  handle('notes:bulkVisible', async (_e, ids, visible) => {
+    const list = sanitizeIdList(ids).filter((id) => store.getNote(id));
+    const failed = [];
     for (const id of list) {
-      if (show) {
+      if (visible) {
         store.updateNote(id, { visible: true });
         await notes.open(id);
       } else {
-        notes.hide(id);
+        const result = await notes.hide(id);
+        if (!result.ok) failed.push(result);
       }
     }
     refreshManagerAndTray();
+    if (failed.length) {
+      throw new Error(
+        `${failed.length} note(s) could not be saved and were left open: ${failed[0].message || 'save failed'}`
+      );
+    }
     return list.length;
   });
 
-  ipcMain.handle('notes:exportMarkdown', async (_e, id) => {
+  handle('notes:exportMarkdown', async (e, id) => {
     const noteId = requireId(id, 'noteId');
-    const md = store.noteToMarkdown(noteId);
-    if (!md) return null;
+    await flushNoteOrThrow(noteId, 'exporting it');
     const note = store.getNote(noteId);
-    const { filePath, canceled } = await dialog.showSaveDialog({
+    if (!note) throw new Error('Note not found');
+    const { filePath, canceled } = await dialog.showSaveDialog(dialogParent(e), {
       title: 'Export note as Markdown',
-      defaultPath: `${(note && note.title) || 'note'}.md`,
+      defaultPath: path.join(app.getPath('documents'), `${safeFileName(note.title)}.md`),
       filters: [{ name: 'Markdown', extensions: ['md'] }]
     });
     if (canceled || !filePath) return null;
-    require('fs').writeFileSync(filePath, md, 'utf8');
+    await fs.promises.writeFile(filePath, store.noteToMarkdown(noteId), 'utf8');
     return filePath;
   });
 
-  ipcMain.handle('notes:setClickThrough', (e, id, enabled) => {
+  handle('notes:setClickThrough', (e, id, enabled) => {
     const noteId = requireId(id, 'noteId');
     assertFromNote(e, noteId);
     const note = store.updateNote(noteId, { clickThrough: Boolean(enabled) });
-    if (note) notes.applyNoteAppearance(noteId);
+    if (note) notes.applyNoteAppearance(noteId, { notifyRenderer: false });
+    refreshManagerAndTray();
     return note;
   });
 
-  ipcMain.handle('notes:chromeHover', (e, id, hovering) => {
+  handle('notes:chromeHover', (e, id, hovering) => {
     const noteId = requireId(id, 'noteId');
-    assertFromNote(e, noteId);
-    const win = notes.get(noteId);
+    const win = assertFromNote(e, noteId);
     const note = store.getNote(noteId);
-    if (!win || !note) return;
-    const global = store.getSettings().globalClickThrough;
-    const shouldIgnore = (global || note.clickThrough) && !hovering;
-    const { applyClickThrough } = require('./platform');
-    applyClickThrough(win, shouldIgnore, true);
+    if (!note) return;
+    const ignore = (store.getSettings().globalClickThrough || note.clickThrough) && !hovering;
+    applyClickThrough(win, ignore, true);
   });
 
-  ipcMain.handle('workspaces:list', () => store.listWorkspaces());
-  ipcMain.handle('workspaces:active', () => store.getActiveWorkspaceId());
-  ipcMain.handle('workspaces:setActive', (_e, id) => {
+  handle('workspaces:list', () => store.listWorkspaces());
+  handle('workspaces:setActive', (_e, id) => {
     const result = store.setActiveWorkspace(requireId(id, 'workspaceId'));
     refreshManagerAndTray();
     return result;
   });
-  ipcMain.handle('workspaces:create', (_e, name) => {
+  handle('workspaces:create', (_e, name) => {
     const ws = store.createWorkspace(String(name || '').slice(0, 80));
     refreshManagerAndTray();
     return ws;
   });
-  ipcMain.handle('workspaces:rename', (_e, id, name) => {
+  handle('workspaces:rename', (_e, id, name) => {
     const ws = store.renameWorkspace(requireId(id, 'workspaceId'), String(name || '').slice(0, 80));
     refreshManagerAndTray();
     return ws;
   });
-  ipcMain.handle('workspaces:delete', (_e, id) => {
-    const ok = store.deleteWorkspace(requireId(id, 'workspaceId'));
-    for (const n of [...notes.listOpenIds()]) {
-      if (!store.getNote(n)) notes.closeAndDestroy(n);
-    }
+  handle('workspaces:delete', (_e, id) => {
+    const workspaceId = requireId(id, 'workspaceId');
+    const doomed = store.listNotes({ workspaceId }).map((n) => n.id);
+    const ok = store.deleteWorkspace(workspaceId);
+    if (ok) doomed.forEach((noteId) => notes.closeAndDestroy(noteId));
     refreshManagerAndTray();
     return ok;
   });
 
-  ipcMain.handle('data:exportAll', async (e) => {
-    assertFromApp(e);
-    const { filePath, canceled } = await dialog.showSaveDialog({
+  handle('data:exportAll', async (e) => {
+    await flushPendingNotes(notes, store);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const { filePath, canceled } = await dialog.showSaveDialog(dialogParent(e), {
       title: 'Export all notes',
-      defaultPath: `ghost-notetaker-backup-${Date.now()}.json`,
+      defaultPath: path.join(app.getPath('documents'), `ghost-notetaker-backup-${stamp}.json`),
       filters: [{ name: 'JSON', extensions: ['json'] }]
     });
     if (canceled || !filePath) return null;
-    await flushPendingNotes(notes, store);
     const payload = store.exportAll();
-    require('fs').writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: 'utf8', mode: 0o600 });
-    return filePath;
+    await fs.promises.writeFile(filePath, JSON.stringify(payload, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600
+    });
+    return { filePath, notes: payload.notes.length, workspaces: payload.workspaces.length };
   });
 
-  ipcMain.handle('data:importAll', async (e, mode) => {
-    assertFromApp(e);
+  handle('data:importAll', async (e, mode) => {
     const importMode = mode === 'replace' ? 'replace' : 'merge';
-    const { filePaths, canceled } = await dialog.showOpenDialog({
+    const { filePaths, canceled } = await dialog.showOpenDialog(dialogParent(e), {
       title: 'Import notes',
       filters: [{ name: 'JSON', extensions: ['json'] }],
       properties: ['openFile']
@@ -373,56 +434,32 @@ function registerIpc() {
     if (canceled || !filePaths || !filePaths[0]) return null;
     let raw;
     try {
-      raw = JSON.parse(require('fs').readFileSync(filePaths[0], 'utf8'));
+      raw = JSON.parse(await fs.promises.readFile(filePaths[0], 'utf8'));
     } catch (err) {
-      throw new Error(
-        `Could not parse import file: ${err && err.message ? err.message : String(err)}`
-      );
+      throw new Error(`Could not read that file as a Ghost Notetaker backup: ${err.message || err}`);
     }
     await flushPendingNotes(notes, store);
-    let result;
-    try {
-      result = store.importAll(raw, importMode);
-    } catch (err) {
-      throw new Error(err && err.message ? err.message : String(err));
-    }
+    const result = store.importAll(raw, importMode);
     if (importMode === 'replace') {
+      // Replaced notes arrive hidden so they open under the current protection setting.
       notes.destroyAll();
-      // Notes are forced hidden on replace; do not reopen under imported protection settings.
       await notes.openVisibleNotes();
     }
     refreshManagerAndTray();
     return result;
   });
 
-  ipcMain.handle('store:getLoadError', (e) => {
-    assertFromApp(e);
-    return store.getLoadError ? store.getLoadError() : null;
-  });
-
-  ipcMain.handle('store:acknowledgeCorruptRecovery', (e) => {
-    assertFromApp(e);
-    if (!store.acknowledgeCorruptRecovery) return null;
-    const state = store.acknowledgeCorruptRecovery();
-    refreshManagerAndTray();
-    return {
-      ok: true,
-      workspaces: state.workspaces.length,
-      notes: state.notes.length
-    };
-  });
-
-  ipcMain.handle('settings:get', () => store.getSettings());
-  ipcMain.handle('settings:update', (e, patch) => {
-    assertFromApp(e);
+  handle('settings:update', (_e, patch) => {
     const safe = sanitizeSettingsPatch(patch);
+    if (safe.shortcuts) assertNoShortcutConflict(safe.shortcuts);
+    if (!capabilities().launchAtLogin) delete safe.launchAtLogin;
     const s = store.updateSettings(safe);
     if (safe.shortcuts) shortcuts.registerGlobal();
     if (Object.prototype.hasOwnProperty.call(safe, 'contentProtection')) {
-      notes.reapplyContentProtection();
+      setContentProtection(s.contentProtection);
     }
     if (Object.prototype.hasOwnProperty.call(safe, 'launchAtLogin')) {
-      syncLoginItem(s.launchAtLogin);
+      applyLaunchAtLogin(s.launchAtLogin);
     }
     if (Object.prototype.hasOwnProperty.call(safe, 'globalClickThrough')) {
       notes.setGlobalClickThrough(s.globalClickThrough);
@@ -431,10 +468,27 @@ function registerIpc() {
     return s;
   });
 
-  ipcMain.handle('shortcuts:list', () => shortcuts.listDefinitions());
+  handle('shortcuts:list', () => shortcuts.listDefinitions());
+  handle('shortcuts:set', (_e, id, accelerator) => {
+    if (!SHORTCUT_ACTIONS.some((a) => a.id === id)) throw new Error('Unknown shortcut');
+    const accel = normalizeAccelerator(accelerator);
+    if (accel === null) {
+      throw new Error('Use a letter, number, F-key, Space, or arrow key together with Ctrl, Alt, or Cmd.');
+    }
+    return applyShortcutBindings({ [id]: accel });
+  });
+  handle('shortcuts:reset', () => applyShortcutBindings(defaultShortcuts()));
+  handle('shortcuts:pause', (_e, paused) => {
+    shortcuts.pause(Boolean(paused));
+    return true;
+  });
 
-  ipcMain.handle('shell:openExternal', async (e, url) => {
-    assertFromApp(e);
+  handle('app:revealDataFile', () => {
+    shell.showItemInFolder(storePath());
+    return true;
+  });
+
+  handle('shell:openExternal', async (_e, url) => {
     if (typeof url !== 'string' || url.length > 2048) return false;
     let parsed;
     try {
@@ -446,57 +500,89 @@ function registerIpc() {
     await shell.openExternal(parsed.toString());
     return true;
   });
+}
 
-  ipcMain.handle('app:quit', () => {
-    quitting = true;
-    app.quit();
-  });
-
+function welcomeNoteContent() {
+  const managerKey = formatAccelerator(store.getSettings().shortcuts.toggleManager);
+  const caps = capabilities();
+  let protection;
+  if (!caps.contentProtection) {
+    protection =
+      'Screen-capture hiding is **not available on Linux**: notes appear in screenshots, recordings, and screen shares.';
+  } else if (isMac()) {
+    protection =
+      'Notes are hidden from screen capture where macOS allows it. Apps that capture with ScreenCaptureKit can still record them, so test your own call or recording app first.';
+  } else {
+    protection =
+      'Notes are hidden from screen capture on Windows 10 (2004) and later. Test your own call or recording app before relying on it.';
+  }
+  return [
+    '# Welcome',
+    '',
+    'This note floats above other windows. Hover it to show its controls and drag the top bar to move it.',
+    '',
+    `- Open the **Notes Manager** from the tray icon${managerKey ? ` or with ${managerKey}` : ''}.`,
+    '- **✕** hides a note. Only the Notes Manager deletes notes.',
+    '- The eye button switches to the Markdown preview, where these boxes can be ticked:',
+    '',
+    '- [ ] Move this note somewhere handy',
+    '- [ ] Open the Notes Manager',
+    '',
+    protection,
+    ''
+  ].join('\n');
 }
 
 async function boot() {
   hideDockIcon();
+  if (isMac()) {
+    // Keep standard Edit shortcuts (copy/paste/undo) without the default View
+    // menu's reload and developer tools.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }])
+    );
+  } else {
+    Menu.setApplicationMenu(null);
+  }
 
-  store = new Store(storePath());
+  store = new Store(storePath(), { onSaveStateChange: broadcastSaveState });
   store.load();
 
-  if (store.getLoadError && store.getLoadError()) {
-    const info = store.getLoadError();
+  const loadError = store.getLoadError();
+  if (loadError) {
     const detail = [
-      info.message || 'The notes file could not be read.',
-      info.quarantinePath
-        ? `Original file quarantined at:\n${info.quarantinePath}`
-        : 'The original file was left in place because it could not be moved.',
+      loadError.message || 'The notes file could not be read.',
+      loadError.quarantinePath
+        ? `The unreadable file was moved to:\n${loadError.quarantinePath}`
+        : `The unreadable file could not be moved and is still at:\n${loadError.originalPath}`,
       '',
-      'Choose Recover to start with an empty notebook (explicit).',
-      'Choose Quit to exit without writing a new store file.'
+      'Start with an empty notebook (the unreadable file is kept), or quit without changing anything.'
     ].join('\n');
     const { response } = await dialog.showMessageBox({
       type: 'error',
-      title: 'Ghost Notetaker — store recovery',
-      message: 'Notes data looks corrupt',
+      title: 'Ghost Notetaker — notes file unreadable',
+      message: 'Your notes file could not be read',
       detail,
-      buttons: ['Recover empty notebook', 'Quit'],
+      buttons: ['Start Empty Notebook', 'Quit'],
       defaultId: 1,
       cancelId: 1,
       noLink: true
     });
     if (response !== 0) {
       allowQuit = true;
-      quitting = true;
       app.quit();
       return;
     }
     store.acknowledgeCorruptRecovery();
   }
 
-  // Reconcile launch-at-login with OS
-  const settings = store.getSettings();
-  if (settings.launchAtLogin) {
-    syncLoginItem(true);
-  } else if (getLaunchAtLogin()) {
-    // Keep store in sync if OS already has it enabled from a prior install
-    store.updateSettings({ launchAtLogin: true });
+  if (capabilities().launchAtLogin) {
+    if (store.getSettings().launchAtLogin) {
+      applyLaunchAtLogin(true);
+    } else if (getLaunchAtLogin()) {
+      // The OS login item survived from an earlier install; reflect it in settings.
+      store.updateSettings({ launchAtLogin: true });
+    }
   }
 
   notes = new NoteWindowController({
@@ -506,7 +592,9 @@ async function boot() {
   });
 
   manager = new ManagerWindowController({
-    attachShortcuts: (win) => shortcuts.attachLocal(win)
+    attachShortcuts: (win) => shortcuts.attachLocal(win),
+    isContentProtected: () => store.getSettings().contentProtection !== false,
+    onClosed: () => shortcuts.pause(false)
   });
 
   shortcuts = new ShortcutController({
@@ -515,6 +603,7 @@ async function boot() {
   });
   shortcuts.registerGlobal();
 
+  const safe = (fn) => (...args) => Promise.resolve().then(() => fn(...args)).catch(logError);
   trayApi = createAppTray({
     getSettings: () => store.getSettings(),
     getRecentNotes: () => store.recentNotes(8),
@@ -524,40 +613,34 @@ async function boot() {
       store.setActiveWorkspace(id);
       refreshManagerAndTray();
     },
-    newNote: () => createNote(),
-    newNoteFromTemplate: (templateId) => createNote({ templateId }),
-    quickCapture: () => quickCapture(),
-    openNote: async (id) => {
+    newNote: safe(() => createNote()),
+    newNoteFromTemplate: safe((templateId) => createNote({ templateId })),
+    quickCapture: safe(quickCapture),
+    openNote: safe(async (id) => {
       store.updateNote(id, { visible: true });
       await notes.open(id);
       refreshManagerAndTray();
-    },
+    }),
     openManager: () => manager.open(),
     openSettings: () => {
       manager.open();
-      setTimeout(() => manager.send('manager:showSettings'), 200);
+      manager.send('manager:showSettings');
+    },
+    openShortcuts: () => {
+      manager.open();
+      manager.send('manager:showShortcuts');
     },
     toggleClickThrough: () => {
       notes.toggleGlobalClickThrough();
       refreshManagerAndTray();
     },
-    toggleHideShow: () => notes.toggleHideShowAll().then(() => refreshManagerAndTray()),
-    hideAll: () => hideAllNotes(),
-    showAll: () => showAllNotes(),
+    hideAll: safe(hideAllNotes),
+    showAll: safe(showAllNotes),
     toggleContentProtection: () => {
-      const cur = store.getSettings().contentProtection !== false;
-      store.updateSettings({ contentProtection: !cur });
-      notes.reapplyContentProtection();
+      setContentProtection(store.getSettings().contentProtection === false);
       refreshManagerAndTray();
     },
-    openShortcuts: () => {
-      manager.open();
-      setTimeout(() => manager.send('manager:showShortcuts'), 200);
-    },
-    quit: () => {
-      quitting = true;
-      app.quit();
-    }
+    quit: () => app.quit()
   });
 
   registerIpc();
@@ -565,65 +648,69 @@ async function boot() {
   screen.on('display-removed', () => notes.clampAllToDisplays());
   screen.on('display-metrics-changed', () => notes.clampAllToDisplays());
 
-  const visible = store.listNotes().filter((n) => n.visible);
-  if (visible.length === 0 && store.listNotes().length === 0) {
-    await createNote({ templateId: 'blank', title: 'Ghost' });
-    const first = store.listNotes()[0];
-    if (first) {
-      store.updateNote(first.id, {
-        content: [
-          '# Ghost',
-          '',
-          'Best-effort hide from screen capture (not guaranteed). Hover the top bar for controls.',
-          '',
-          'Tray → Notes Manager for search, workspaces, prefs.',
-          'Close hides. Delete only from the manager.',
-          ''
-        ].join('\n')
-      });
-      notes.applyNoteAppearance(first.id);
-    }
+  if (store.listNotes().length === 0) {
+    const welcome = await createNote({
+      templateId: 'blank',
+      title: 'Ghost Notetaker',
+      content: welcomeNoteContent(),
+      bounds: cursorNearbyBounds({ width: 400, height: 430 })
+    });
+    store.updateNote(welcome.id, { previewMode: true });
   } else {
     await notes.openVisibleNotes();
   }
-
-  if (!isMac()) {
-    Menu.setApplicationMenu(null);
-  }
 }
 
-app
-  .whenReady()
-  .then(boot)
-  .catch((err) => {
-    console.error('Ghost Notetaker failed to start:', err);
-  });
+if (gotLock) {
+  app
+    .whenReady()
+    .then(boot)
+    .catch((err) => {
+      console.error('Ghost Notetaker failed to start:', err);
+      dialog.showErrorBox(
+        'Ghost Notetaker could not start',
+        `${err && err.message ? err.message : err}\n\nNotes file: ${storePath()}`
+      );
+      allowQuit = true;
+      app.exit(1);
+    });
+}
 
 app.on('before-quit', (event) => {
   if (allowQuit) {
-    quitting = true;
     try {
       if (shortcuts) shortcuts.unregisterGlobal();
-      if (notes) notes.destroyAll();
+      if (notes) notes.destroyAll({ persistBounds: Boolean(store) && !store.isSaveBlocked() });
+      if (store && !store.isSaveBlocked()) store.flush();
     } catch (err) {
       console.error(err);
     }
     return;
   }
   event.preventDefault();
-  quitting = true;
+  if (quitInProgress) return;
+  quitInProgress = true;
   (async () => {
     try {
       await flushPendingNotes(notes, store && !store.isSaveBlocked() ? store : null);
-      if (shortcuts) shortcuts.unregisterGlobal();
-      if (notes) notes.destroyAll();
-      allowQuit = true;
-      app.quit();
     } catch (err) {
-      quitting = false;
-      console.error(err);
-      dialog.showErrorBox('Notes could not be saved', `${err.message || err}. The app remains open so you can retry or export your notes.`);
+      const { response } = await dialog.showMessageBox({
+        type: 'warning',
+        title: 'Ghost Notetaker',
+        message: 'Some changes could not be saved',
+        detail: `${err.message || err}\n\nKeep the app open to retry or export your notes, or quit and lose the unsaved changes.`,
+        buttons: ['Keep Open', 'Quit Without Saving'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true
+      });
+      if (response === 0) {
+        quitInProgress = false;
+        return;
+      }
     }
+    allowQuit = true;
+    app.quit();
   })();
 });
 

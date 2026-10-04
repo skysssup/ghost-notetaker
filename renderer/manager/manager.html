@@ -14,58 +14,63 @@
     <div class="app">
       <aside class="sidebar">
         <div class="brand">
-          <span class="logo">◈</span>
+          <span class="logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 21V10a7 7 0 0 1 14 0v11l-2.3-1.8L14.3 21 12 19.2 9.7 21l-2.4-1.8L5 21Z" /><circle cx="9.5" cy="10" r="1.3" fill="#2a1b5e" /><circle cx="14.5" cy="10" r="1.3" fill="#2a1b5e" /></svg>
+          </span>
           <div>
             <div class="brand-name">Ghost Notetaker</div>
             <div class="brand-sub">Notes Manager</div>
           </div>
         </div>
 
-        <section class="side-section">
-          <div class="side-header">
-            <span>Workspaces</span>
-            <button type="button" id="btnNewWs" class="mini-btn" title="New workspace" aria-label="New workspace">＋</button>
-          </div>
-          <ul id="wsList" class="ws-list"></ul>
-        </section>
+        <div class="side-scroll">
+          <section class="side-section" aria-labelledby="wsHeading">
+            <div class="side-header">
+              <h2 id="wsHeading">Workspaces</h2>
+              <button type="button" id="btnNewWs" class="mini-btn" title="New workspace" aria-label="New workspace">+</button>
+            </div>
+            <ul id="wsList" class="side-list"></ul>
+          </section>
 
-        <section class="side-section">
-          <div class="side-header"><span>Tags</span></div>
-          <ul id="tagList" class="tag-list"></ul>
-        </section>
+          <section class="side-section" aria-labelledby="tagHeading">
+            <div class="side-header"><h2 id="tagHeading">Tags</h2></div>
+            <ul id="tagList" class="side-list"></ul>
+          </section>
 
-        <section class="side-section recent-section">
-          <div class="side-header"><span>Recent</span></div>
-          <ul id="recentList" class="recent-list"></ul>
-        </section>
+          <section class="side-section" aria-labelledby="recentHeading">
+            <div class="side-header"><h2 id="recentHeading">Recent</h2></div>
+            <ul id="recentList" class="side-list"></ul>
+          </section>
+        </div>
 
         <div class="side-footer">
           <button type="button" id="btnSettings" class="text-btn">Preferences</button>
-          <button type="button" id="btnShortcuts" class="text-btn">Keyboard Shortcuts</button>
-          <button type="button" id="btnExport" class="text-btn">Export All</button>
-          <button type="button" id="btnImport" class="text-btn">Import…</button>
+          <button type="button" id="btnShortcuts" class="text-btn">Keyboard shortcuts</button>
+          <button type="button" id="btnExport" class="text-btn">Export all notes…</button>
+          <button type="button" id="btnImport" class="text-btn">Import backup…</button>
         </div>
       </aside>
 
       <main class="main">
+        <div id="saveBanner" class="save-banner" role="alert" hidden></div>
         <header class="toolbar">
           <div class="search-wrap">
-            <input id="search" type="search" placeholder="Search…" aria-label="Search notes" autofocus />
+            <input id="search" type="search" placeholder="Search titles, text, and tags" aria-label="Search notes" autofocus />
           </div>
           <div class="toolbar-actions">
-            <select id="visibilityFilter" title="Visibility" aria-label="Filter by visibility">
-              <option value="all">All</option>
+            <select id="visibilityFilter" title="Show" aria-label="Filter by visibility">
+              <option value="all">All notes</option>
               <option value="open">Open</option>
               <option value="hidden">Hidden</option>
             </select>
             <select id="sortBy" title="Sort" aria-label="Sort notes">
-              <option value="updated">Updated</option>
+              <option value="updated">Last edited</option>
               <option value="created">Created</option>
               <option value="title">Title</option>
               <option value="color">Color</option>
             </select>
             <select id="templateSelect" title="Template for new note" aria-label="Template for new note">
-              <option value="blank">Blank</option>
+              <option value="blank">Blank note</option>
             </select>
             <button type="button" id="btnNewNote" class="primary-btn">New note</button>
           </div>
@@ -77,21 +82,22 @@
             <span>Select all</span>
           </label>
           <div class="bulk-actions">
-            <button type="button" id="btnBulkShow" class="ghost-btn" disabled>Show</button>
-            <button type="button" id="btnBulkHide" class="ghost-btn" disabled>Hide</button>
-            <span id="selCount" class="sel-count"></span>
+            <span id="selCount" class="sel-count" aria-live="polite"></span>
+            <button type="button" id="btnBulkShow" class="ghost-btn" disabled>Show selected</button>
+            <button type="button" id="btnBulkHide" class="ghost-btn" disabled>Hide selected</button>
           </div>
         </div>
 
-        <div id="noteList" class="note-list" role="list"></div>
+        <div id="noteList" class="note-list" role="list" aria-label="Notes"></div>
         <div id="empty" class="empty hidden" role="status">
-          <div class="empty-icon" aria-hidden="true">◈</div>
-          <h2>No notes in this view</h2>
-          <p>Create a note, pick a template, or switch workspace.</p>
+          <h2 id="emptyTitle">No notes here yet</h2>
+          <p id="emptyText">Create a note or pick a template to get started.</p>
           <button type="button" id="btnEmptyNew" class="primary-btn">New note</button>
         </div>
       </main>
     </div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
     <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-card" id="modalCard">

@@ -47,6 +47,26 @@ describe('markdown', () => {
     assert.match(html, /<pre><code>const x = 1;/);
   });
 
+  it('shows code spans literally instead of formatting inside them', () => {
+    const html = renderMarkdown('Use `a*b*c` and `[x](https://e.com)` but **bold** works');
+    assert.match(html, /<code>a\*b\*c<\/code>/);
+    assert.match(html, /<code>\[x\]\(https:\/\/e\.com\)<\/code>/);
+    assert.doesNotMatch(html, /<a /);
+    assert.match(html, /<strong>bold<\/strong>/);
+  });
+
+  it('toggles the task marker, not brackets inside the task text', () => {
+    assert.equal(toggleTaskAtLine('- [x] keep [ ] text', 0), '- [ ] keep [ ] text');
+    assert.equal(toggleTaskAtLine('  * [ ] nested', 0), '  * [x] nested');
+    assert.equal(toggleTaskAtLine('not a task [ ]', 0), 'not a task [ ]');
+  });
+
+  it('only links http and https URLs', () => {
+    const html = renderMarkdown('[a](javascript:alert(1)) [b](file:///etc/passwd) [c](https://ok.example)');
+    assert.equal((html.match(/<a /g) || []).length, 1);
+    assert.match(html, /href="https:\/\/ok\.example"/);
+  });
+
   it('renders strikethrough', () => {
     const html = renderMarkdown('gone ~~old~~ stay');
     assert.match(html, /<del>old<\/del>/);

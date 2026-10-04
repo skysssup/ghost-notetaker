@@ -15,5 +15,10 @@ contextBridge.exposeInMainWorld('ghostNote', {
     const handler = (_e, note) => cb(note);
     ipcRenderer.on('note:updated', handler);
     return () => ipcRenderer.removeListener('note:updated', handler);
+  },
+  onSaveState: (cb) => {
+    const handler = (_e, state) => cb(state);
+    ipcRenderer.on('app:saveState', handler);
+    return () => ipcRenderer.removeListener('app:saveState', handler);
   }
 });

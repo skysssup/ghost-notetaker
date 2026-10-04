@@ -1,24 +1,17 @@
 'use strict';
 
 const path = require('path');
-const fs = require('fs');
 const { Tray, Menu, nativeImage } = require('electron');
-const { isMac, acceleratorLabel } = require('./platform');
+const { isMac, capabilities } = require('./platform');
 const { TEMPLATES } = require('./store');
 
-const TINY_PNG =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANElEQVQ4T2NkYGD4z0ABYBzVMKoBBgYGBhBmZGRk/A8CDAwMjP8ZGRn/jwIYGBj+MzIy/h8FMDAwMAAAtW4E/0bV7y8AAAAASUVORK5CYII=';
-
 function createTrayImage() {
-  const file = path.join(__dirname, '..', 'build', 'tray-icon.png');
-  if (fs.existsSync(file)) {
-    let img = nativeImage.createFromPath(file);
-    if (!img.isEmpty()) {
-      if (isMac()) img.setTemplateImage(true);
-      return img;
-    }
-  }
-  return nativeImage.createFromDataURL(TINY_PNG);
+  // macOS menu-bar icons are template images: black shapes the system tints.
+  // Other platforms get the colored icon.
+  const file = isMac() ? 'trayTemplate.png' : 'tray-icon.png';
+  const img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', file));
+  if (isMac()) img.setTemplateImage(true);
+  return img;
 }
 
 function truncate(s, n) {
@@ -30,10 +23,11 @@ function buildTrayMenu(api) {
   const settings = api.getSettings();
   const clickThrough = settings.globalClickThrough;
   const shortcuts = settings.shortcuts || {};
+  const protectionAvailable = capabilities().contentProtection;
   const contentProtection = settings.contentProtection !== false;
-  const recent = typeof api.getRecentNotes === 'function' ? api.getRecentNotes() : [];
-  const workspaces = typeof api.getWorkspaces === 'function' ? api.getWorkspaces() : [];
-  const activeWs = typeof api.getActiveWorkspaceId === 'function' ? api.getActiveWorkspaceId() : null;
+  const recent = api.getRecentNotes();
+  const workspaces = api.getWorkspaces();
+  const activeWs = api.getActiveWorkspaceId();
 
   const templateItems = Object.values(TEMPLATES).map((t) => ({
     label: t.label,
@@ -48,20 +42,17 @@ function buildTrayMenu(api) {
           click: () => api.openNote(n.id)
         }));
 
-  const workspaceItems =
-    workspaces.length === 0
-      ? [{ label: 'No workspaces', enabled: false }]
-      : workspaces.map((ws) => ({
-          label: ws.name,
-          type: 'radio',
-          checked: ws.id === activeWs,
-          click: () => api.setActiveWorkspace(ws.id)
-        }));
+  const workspaceItems = workspaces.map((ws) => ({
+    label: ws.name,
+    type: 'radio',
+    checked: ws.id === activeWs,
+    click: () => api.setActiveWorkspace(ws.id)
+  }));
 
   return Menu.buildFromTemplate([
     {
       label: 'New Note',
-      accelerator: shortcuts.newNote,
+      accelerator: shortcuts.newNote || undefined,
       click: () => api.newNote()
     },
     {
@@ -70,7 +61,7 @@ function buildTrayMenu(api) {
     },
     {
       label: 'Quick Capture (clipboard)',
-      accelerator: shortcuts.quickCapture,
+      accelerator: shortcuts.quickCapture || undefined,
       click: () => api.quickCapture()
     },
     { type: 'separator' },
@@ -89,7 +80,7 @@ function buildTrayMenu(api) {
     { type: 'separator' },
     {
       label: 'Notes Manager…',
-      accelerator: shortcuts.toggleManager,
+      accelerator: shortcuts.toggleManager || undefined,
       click: () => api.openManager()
     },
     {
@@ -99,24 +90,26 @@ function buildTrayMenu(api) {
     { type: 'separator' },
     {
       label: clickThrough ? 'Disable Click-Through' : 'Enable Click-Through',
-      accelerator: shortcuts.toggleClickThrough,
+      accelerator: shortcuts.toggleClickThrough || undefined,
       click: () => api.toggleClickThrough()
     },
     {
       label: 'Hide All Notes',
-      accelerator: shortcuts.hideShowAll,
+      accelerator: shortcuts.hideShowAll || undefined,
       click: () => api.hideAll()
     },
     {
       label: 'Show All Notes',
       click: () => api.showAll()
     },
-    {
-      label: contentProtection ? 'Content Protection: On' : 'Content Protection: Off',
-      type: 'checkbox',
-      checked: contentProtection,
-      click: () => api.toggleContentProtection()
-    },
+    protectionAvailable
+      ? {
+          label: 'Hide from Screen Capture',
+          type: 'checkbox',
+          checked: contentProtection,
+          click: () => api.toggleContentProtection()
+        }
+      : { label: 'Screen-capture hiding: not available on Linux', enabled: false },
     { type: 'separator' },
     {
       label: 'Keyboard Shortcuts…',
@@ -136,16 +129,10 @@ function createAppTray(api) {
   const rebuild = () => tray.setContextMenu(buildTrayMenu(api));
   rebuild();
   tray.on('click', () => {
-    if (process.platform === 'win32' || process.platform === 'linux') {
-      api.openManager();
-    }
+    if (process.platform === 'win32' || process.platform === 'linux') api.openManager();
   });
   tray.on('double-click', () => api.openManager());
   return { tray, rebuild };
 }
 
-module.exports = {
-  createAppTray,
-  buildTrayMenu,
-  acceleratorLabel
-};
+module.exports = { createAppTray };

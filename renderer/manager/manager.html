@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="manager.css" />
   </head>
   <body>
-    <!-- Icons: Lucide 1.51.0 (ISC, see ../shared/LUCIDE-LICENSE.txt); i-ghost is drawn for this app. -->
+    <!-- Icons: Lucide 1.51.0 (ISC, see ../shared/LUCIDE-LICENSE.txt); i-ghost and i-logo are drawn for this app. -->
     <svg class="icon-defs" aria-hidden="true">
       <defs>
         <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
@@ -37,6 +37,8 @@
         <symbol id="i-folder-input" viewBox="0 0 24 24"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1"/><path d="M2 13h10"/><path d="m9 16 3-3-3-3"/></symbol>
         <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
         <symbol id="i-ghost" viewBox="0 0 24 24"><path d="M5 20.5V10a7 7 0 0 1 14 0v10.5l-2.33-1.75-2.34 1.75L12 18.75l-2.33 1.75-2.34-1.75Z"/><path d="M9.5 10h.01"/><path d="M14.5 10h.01"/></symbol>
+        <symbol id="i-sticky-note" viewBox="0 0 24 24"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/></symbol>
+        <symbol id="i-logo" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#18181b"/><g transform="translate(4.32 4.48) scale(.64)"><path fill="#fbe8a5" stroke="#fbe8a5" stroke-width="1.1" stroke-linejoin="round" d="M5 20.5V10a7 7 0 0 1 14 0v10.5l-2.33-1.75-2.34 1.75L12 18.75l-2.33 1.75-2.34-1.75Z"/><ellipse cx="9.6" cy="10.4" rx="1.2" ry="1.5" fill="#18181b"/><ellipse cx="14.4" cy="10.4" rx="1.2" ry="1.5" fill="#18181b"/></g></symbol>
       </defs>
     </svg>
 
@@ -44,9 +46,8 @@
       <aside class="sidebar" aria-label="Notes Manager navigation">
         <div class="sidebar-top drag">
           <div class="brand">
-            <svg class="ico brand-mark" aria-hidden="true"><use href="#i-ghost" /></svg>
+            <svg class="brand-mark" aria-hidden="true"><use href="#i-logo" /></svg>
             <span class="brand-name">Ghost Notetaker</span>
-            <span class="brand-version" id="brandSub"></span>
           </div>
         </div>
 
@@ -101,7 +102,7 @@
               <span id="sortLabel">Last edited</span><svg class="ico"><use href="#i-chevron-down" /></svg>
             </button>
             <div class="split">
-              <button type="button" id="btnNewNote" class="primary-btn">New note</button>
+              <button type="button" id="btnNewNote" class="primary-btn"><svg class="ico"><use href="#i-plus" /></svg><span>New note</span></button>
               <button type="button" id="btnTemplates" class="primary-btn split-more" aria-haspopup="menu" aria-expanded="false" aria-label="New note from a template" title="New note from a template"><svg class="ico"><use href="#i-chevron-down" /></svg></button>
             </div>
           </header>
@@ -137,7 +138,9 @@
           <div class="scroller" id="notesScroller">
             <div id="noteList" class="note-list list" role="list" aria-label="Notes"></div>
             <div id="empty" class="empty hidden" role="status">
-              <p><span id="emptyTitle">No notes in this workspace</span>. <button type="button" id="btnEmptyNew" class="ink-link">New note</button></p>
+              <svg class="ico empty-icon" aria-hidden="true"><use href="#i-sticky-note" /></svg>
+              <p id="emptyTitle" class="empty-title">No notes in this workspace</p>
+              <button type="button" id="btnEmptyNew" class="hairline-btn">New note</button>
             </div>
           </div>
         </section>
@@ -146,14 +149,16 @@
           <div class="page-head drag">
             <div class="view-titles">
               <h1 id="trashTitle">Trash</h1>
-              <p class="view-sub">Notes stay here for 30 days, then they are deleted for good.</p>
+              <p class="view-sub">Notes are deleted for good after 30 days.</p>
             </div>
             <button type="button" id="btnEmptyTrash" class="hairline-btn danger">Empty trash</button>
           </div>
           <div class="scroller">
             <div id="trashList" class="note-list list trash" role="list" aria-label="Notes in the trash"></div>
             <div id="trashEmpty" class="empty hidden" role="status">
-              <p>The trash is empty; notes you move here can be restored for 30 days.</p>
+              <svg class="ico empty-icon" aria-hidden="true"><use href="#i-trash-2" /></svg>
+              <p class="empty-title">Trash is empty</p>
+              <p class="empty-hint">Deleted notes stay here for 30 days.</p>
             </div>
           </div>
         </section>

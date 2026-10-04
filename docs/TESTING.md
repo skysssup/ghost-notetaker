@@ -57,7 +57,7 @@ Playwright normally reports every page as focused. Tests that depend on real foc
 
 - Whether real screen-sharing or recording apps (Zoom, Teams, Meet, OBS, QuickTime, Snipping Tool) actually hide the notes. CI only checks that the protection flag is set.
 - First launch of a downloaded build, which goes through macOS Gatekeeper and Windows SmartScreen. CI builds the artifacts on the runner, so they are never quarantined.
-- Physical Mac and Windows machines, multiple monitors, and HiDPI scaling on Windows. The screenshots and animations were taken on Linux at 2× scale.
+- Physical Mac and Windows machines, multiple monitors, and HiDPI scaling on Windows. The screenshots and videos were made on Linux at 2× scale.
 - How notes, bubbles, and the Notes Manager look on macOS and Windows: the transparent margin and shadow around notes, the inset traffic lights and translucent sidebar on macOS, the caption buttons and Mica backdrop on Windows, and the system accent color were checked on Linux only (where none of the platform chrome applies) or not at all.
 - Wayland sessions, GNOME's tray, and the macOS menu-bar icon as it appears on screen.
 - Launch at login on macOS and Windows. Tests don't change the runners' login items.

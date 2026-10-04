@@ -9,18 +9,18 @@ const STORE_VERSION = 2;
 // Paper colors. `ink` is the text color that reads on the paper. The ids are
 // stored in notes files and never change.
 const NOTE_COLORS = [
-  { id: 'amber', hex: '#fce7a6', label: 'Butter', ink: 'dark' },
-  { id: 'peach', hex: '#ffdab6', label: 'Peach', ink: 'dark' },
-  { id: 'coral', hex: '#ffcdc3', label: 'Blush', ink: 'dark' },
-  { id: 'rose', hex: '#ffd2e7', label: 'Rose', ink: 'dark' },
-  { id: 'lavender', hex: '#e6dafe', label: 'Lavender', ink: 'dark' },
-  { id: 'sky', hex: '#c7eaff', label: 'Sky', ink: 'dark' },
-  { id: 'mint', hex: '#c0f7d8', label: 'Mint', ink: 'dark' },
-  { id: 'mist', hex: '#e0eaee', label: 'Mist', ink: 'dark' },
-  { id: 'ivory', hex: '#f8f5ec', label: 'Paper', ink: 'dark' },
-  { id: 'teal', hex: '#174543', label: 'Deep teal', ink: 'light' },
-  { id: 'indigo', hex: '#323153', label: 'Night', ink: 'light' },
-  { id: 'slate', hex: '#2a2e34', label: 'Graphite', ink: 'light' }
+  { id: 'amber', hex: '#fbe8a5', label: 'Butter', ink: 'dark' },
+  { id: 'peach', hex: '#fcdcc3', label: 'Peach', ink: 'dark' },
+  { id: 'coral', hex: '#fbd3cd', label: 'Blush', ink: 'dark' },
+  { id: 'rose', hex: '#f8d4e6', label: 'Rose', ink: 'dark' },
+  { id: 'lavender', hex: '#e3dcfa', label: 'Lavender', ink: 'dark' },
+  { id: 'sky', hex: '#d0e6fa', label: 'Sky', ink: 'dark' },
+  { id: 'mint', hex: '#cdeedc', label: 'Mint', ink: 'dark' },
+  { id: 'mist', hex: '#e2e8ec', label: 'Mist', ink: 'dark' },
+  { id: 'ivory', hex: '#fbfaf6', label: 'Paper', ink: 'dark' },
+  { id: 'teal', hex: '#1f4644', label: 'Deep teal', ink: 'light' },
+  { id: 'indigo', hex: '#2b2a49', label: 'Night', ink: 'light' },
+  { id: 'slate', hex: '#25272c', label: 'Graphite', ink: 'light' }
 ];
 
 const TEMPLATES = {

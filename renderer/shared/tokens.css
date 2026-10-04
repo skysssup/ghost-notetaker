@@ -1,18 +1,18 @@
 /* Ghost Notetaker design tokens, shared by the note window and the Notes Manager.
-   Notes are the only color; the chrome is ink on paper with one accent. */
+   Notes carry the color; the chrome stays neutral with one accent. */
 
 @font-face {
-  font-family: 'iA Writer Quattro V';
-  src: url('../fonts/iAWriterQuattroV.ttf') format('truetype');
-  font-weight: 400 700;
+  font-family: 'Inter Variable';
+  src: url('../fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
   font-style: normal;
   font-display: block;
 }
 
 @font-face {
-  font-family: 'iA Writer Quattro V';
-  src: url('../fonts/iAWriterQuattroV-Italic.ttf') format('truetype');
-  font-weight: 400 700;
+  font-family: 'Inter Variable';
+  src: url('../fonts/InterVariable-Italic.woff2') format('woff2');
+  font-weight: 100 900;
   font-style: italic;
   font-display: block;
 }
@@ -36,72 +36,88 @@
 :root {
   color-scheme: light;
 
-  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', 'Adwaita Sans',
-    Cantarell, 'Noto Sans', system-ui, sans-serif;
-  --font-content: 'iA Writer Quattro V', var(--font-ui);
-  --font-mono: 'iA Writer Mono V', ui-monospace, monospace;
+  --font-ui: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-content: var(--font-ui);
+  --font-mono: 'iA Writer Mono V', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --canvas: oklch(97.5% 0.004 80); /* #f8f6f4 */
-  --sidebar: oklch(95.5% 0.005 80); /* #f2f0ec */
-  --surface: oklch(99% 0.003 80); /* #fdfcf9 */
-  --hairline: rgba(0, 0, 0, 0.08);
-  --hairline-strong: rgba(0, 0, 0, 0.14);
-  --text: #1d1a15;
-  --text-secondary: #615d57;
-  --text-tertiary: #898680;
-  --fill: rgba(29, 26, 21, 0.06);
-  --fill-strong: rgba(29, 26, 21, 0.1);
-  --ink-bg: #1d1a15;
-  --ink-fg: #fdfcf9;
-  --scrim: rgba(29, 26, 21, 0.24);
+  --canvas: #ffffff;
+  --sidebar: #f7f7f8;
+  --surface: #ffffff;
+  --raised: #ffffff;
+  --control: #ffffff;
+  --hairline: rgba(9, 9, 11, 0.07);
+  --hairline-strong: rgba(9, 9, 11, 0.12);
+  --text: #18181b;
+  --text-secondary: #5b5b64;
+  --text-tertiary: #91919a;
+  --fill: rgba(9, 9, 11, 0.04);
+  --fill-strong: rgba(9, 9, 11, 0.07);
+  --ink-bg: #18181b;
+  --ink-fg: #fafafa;
+  --scrim: rgba(9, 9, 11, 0.32);
 
   /* The OS accent replaces --accent at startup; Linux keeps this blue. */
-  --accent: oklch(55% 0.17 255); /* #1570d1 */
-  --accent-text: oklch(from var(--accent) min(l, 0.48) c h);
+  --accent: oklch(57% 0.2 262);
+  --accent-text: oklch(from var(--accent) min(l, 0.5) c h);
   --accent-fill: rgb(from var(--accent) r g b / 0.1);
-  --danger: #c92f33;
+  --accent-ring: rgb(from var(--accent) r g b / 0.3);
+  --danger: #dc3a3f;
   --danger-fill: rgb(from var(--danger) r g b / 0.08);
-  --on-screen: #319751;
+  --on-screen: #1e9e57;
 
-  --paper-ink: #2a2620;
-  --paper-ink-secondary: rgba(42, 38, 32, 0.62);
-  --paper-ink-light: #f1ede6;
-  --paper-ink-light-secondary: rgba(241, 237, 230, 0.66);
+  --paper-ink: #1d1b18;
+  --paper-ink-secondary: rgba(29, 27, 24, 0.6);
+  --paper-ink-light: #f4f2ee;
+  --paper-ink-light-secondary: rgba(244, 242, 238, 0.62);
 
-  --r-1: 4px;
+  --r-1: 6px;
   --r-2: 8px;
   --r-3: 12px;
+  --r-4: 14px;
 
-  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--hairline);
-  --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.28);
-  --shadow-note: 0 1px 2px rgba(0, 0, 0, 0.12), 0 12px 32px -8px rgba(0, 0, 0, 0.35);
+  --shadow-control: 0 1px 2px rgba(9, 9, 11, 0.05);
+  --shadow-lift: 0 1px 2px rgba(9, 9, 11, 0.05), 0 10px 24px -8px rgba(9, 9, 11, 0.18);
+  --shadow-menu: 0 0 0 1px rgba(9, 9, 11, 0.08), 0 4px 10px -2px rgba(9, 9, 11, 0.08), 0 16px 36px -8px rgba(9, 9, 11, 0.2);
+  --shadow-dialog: 0 0 0 1px rgba(9, 9, 11, 0.06), 0 28px 70px -14px rgba(9, 9, 11, 0.38);
+  --shadow-note: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.07), 0 5px 12px -3px rgba(0, 0, 0, 0.1),
+    0 14px 26px -8px rgba(0, 0, 0, 0.22);
 
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --t-fast: 120ms;
-  --t-panel: 180ms;
+  --t-panel: 160ms;
   --t-morph: 240ms;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: oklch(18% 0.004 80); /* #121110 */
-  --sidebar: oklch(21% 0.005 80); /* #191816 */
-  --surface: oklch(24% 0.005 80); /* #201f1d */
-  --hairline: rgba(255, 255, 255, 0.08);
-  --hairline-strong: rgba(255, 255, 255, 0.14);
-  --text: #ebe7e2;
-  --text-secondary: #a7a49f;
-  --text-tertiary: #74716c;
-  --fill: rgba(235, 231, 226, 0.06);
-  --fill-strong: rgba(235, 231, 226, 0.1);
-  --ink-bg: #ebe7e2;
-  --ink-fg: #121110;
-  --scrim: rgba(0, 0, 0, 0.45);
+  --canvas: #161618;
+  --sidebar: #111113;
+  --surface: #1c1c1f;
+  --raised: #232327;
+  --control: #2a2a2e;
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --text: #ededef;
+  --text-secondary: #a3a3ac;
+  --text-tertiary: #6f6f79;
+  --fill: rgba(255, 255, 255, 0.05);
+  --fill-strong: rgba(255, 255, 255, 0.085);
+  --ink-bg: #ededef;
+  --ink-fg: #161618;
+  --scrim: rgba(0, 0, 0, 0.55);
 
-  --accent-text: oklch(from var(--accent) max(l, 0.72) c h);
-  --danger: #e0605f;
-  --on-screen: #4fb872;
+  --accent-text: oklch(from var(--accent) max(l, 0.75) c h);
+  --accent-fill: rgb(from var(--accent) r g b / 0.18);
+  --accent-ring: rgb(from var(--accent) r g b / 0.4);
+  --danger: #f2575c;
+  --danger-fill: rgb(from var(--danger) r g b / 0.12);
+  --on-screen: #3dcf7c;
+
+  --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lift: 0 12px 28px -10px rgba(0, 0, 0, 0.7);
+  --shadow-menu: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+  --shadow-dialog: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 30px 80px -12px rgba(0, 0, 0, 0.8);
 }
 
 @media (prefers-reduced-motion: reduce) {

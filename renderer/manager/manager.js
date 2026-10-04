@@ -90,8 +90,7 @@
     modalTitle: $('modalTitle'),
     modalBody: $('modalBody'),
     modalFooter: $('modalFooter'),
-    modalClose: $('modalClose'),
-    brandSub: $('brandSub')
+    modalClose: $('modalClose')
   };
 
   let lastFocus = null;
@@ -100,6 +99,8 @@
   let savedTimer = null;
   let reloadSeq = 0;
   let listSeq = 0;
+  // Counts settings saves, so a reload that read the settings before a save does not undo it on screen.
+  let settingsSaves = 0;
 
   // ---------- helpers ----------
 
@@ -622,13 +623,16 @@
       const active = state.selectedTag === tag;
       els.tagList.appendChild(
         el('li', {}, [
-          el('button', {
-            type: 'button',
-            class: `side-btn tag-row${active ? ' active' : ''}`,
-            'aria-pressed': String(active),
-            text: `#${tag}`,
-            onclick: () => setTag(active ? null : tag)
-          })
+          el(
+            'button',
+            {
+              type: 'button',
+              class: `side-btn tag-row${active ? ' active' : ''}`,
+              'aria-pressed': String(active),
+              onclick: () => setTag(active ? null : tag)
+            },
+            [el('span', { class: 'hash', text: '#' }), el('span', { class: 'label', text: tag })]
+          )
         ])
       );
     });
@@ -849,7 +853,7 @@
       check,
       el('span', { class: 'paper-dot', 'aria-hidden': 'true' }),
       el('div', { class: 'card-main' }, [titleEl, el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }), body]),
-      el('span', { class: 'card-tags', text: (note.tags || []).map((t) => `#${t}`).join('  ') }),
+      el('span', { class: 'card-tags' }, (note.tags || []).map((t) => el('span', { class: 'tag-pill', text: `#${t}` }))),
       ...clickThrough,
       el('div', { class: 'card-foot' }, [
         el('span', { class: 'when', text: formatRelative(note.updatedAt), title: `Edited ${new Date(note.updatedAt).toLocaleString()}` }),
@@ -1520,6 +1524,7 @@
   }
 
   async function saveSettings(patch) {
+    settingsSaves += 1;
     try {
       const s = await api.updateSettings(patch);
       state.bootstrap.settings = s;
@@ -1535,7 +1540,7 @@
   function settingsSection(id, title, aside, children) {
     return el('section', { class: 'set-section', id, 'aria-labelledby': `${id}H` }, [
       el('h2', { class: 'section-label', id: `${id}H` }, [title, ...(aside ? [el('span', { class: 'section-aside', text: aside })] : [])]),
-      ...children
+      el('div', { class: 'set-group' }, children)
     ]);
   }
 
@@ -1967,6 +1972,7 @@
 
   async function reload() {
     const seq = ++reloadSeq;
+    const saves = settingsSaves;
     const boot = await api.getBootstrap();
     const [allNotes, trash, recent] = await Promise.all([
       api.listNotes({}),
@@ -1997,7 +2003,7 @@
     renderRecent();
     renderTrashCount();
     if (state.view === 'trash') renderTrash();
-    if (state.view === 'settings') syncSettings();
+    if (state.view === 'settings' && saves === settingsSaves) syncSettings();
   }
 
   function applySearch(value) {
@@ -2209,7 +2215,6 @@
     state.layout = s.managerView === 'board' ? 'board' : 'list';
     els.btnBoard.setAttribute('aria-pressed', String(state.layout === 'board'));
     els.btnList.setAttribute('aria-pressed', String(state.layout === 'list'));
-    els.brandSub.textContent = state.bootstrap.version;
     els.searchHint.textContent = '/';
     await reload();
     els.search.focus();

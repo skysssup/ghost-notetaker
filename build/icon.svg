@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <path fill="#fce7a6" d="M134 50h236a92 92 0 0 1 92 92v228a92 92 0 0 1-92 92H142a92 92 0 0 1-92-92V134Z"/>
-  <path fill="#ecce83" d="M134 50 50 134h84Z"/>
-  <g transform="translate(106 104) scale(12.5)" fill="none" stroke="#2a2620" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5 20.5V10a7 7 0 0 1 14 0v10.5l-2.33-1.75-2.34 1.75L12 18.75l-2.33 1.75-2.34-1.75Z"/>
-    <path d="M9.5 10h.01M14.5 10h.01"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="#18181b"/>
+  <g transform="translate(236 239) scale(23)">
+    <path fill="#fbe8a5" stroke="#fbe8a5" stroke-width="1.1" stroke-linejoin="round" d="M5 20.5V10a7 7 0 0 1 14 0v10.5l-2.33-1.75-2.34 1.75L12 18.75l-2.33 1.75-2.34-1.75Z"/>
+    <ellipse cx="9.6" cy="10.4" rx="1.15" ry="1.45" fill="#18181b"/>
+    <ellipse cx="14.4" cy="10.4" rx="1.15" ry="1.45" fill="#18181b"/>
   </g>
 </svg>

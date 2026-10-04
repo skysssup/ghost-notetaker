@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.0] - 2026-10-04
+
+### Changed
+
+- **Redesigned interface.** Neutral chrome, one accent color, softer shadows, and rounded controls throughout the notes and the Notes Manager. The interface and note text use Inter, bundled with the app; monospace stays iA Writer Mono.
+- **Notes** always show their title. Controls fade in on hover, tags are pills, the appearance panel has round swatches and new sliders and switches, and the paper colors are a little softer. Ids are unchanged.
+- **Notes Manager.** Cleaner sidebar, search, and list; board cards lift on hover; selection shows as a bar above the list; settings are grouped; menus, dialogs, and the Undo message were restyled; empty views say what to do next.
+- **Icons.** New app and tray icons.
+- **README.** Shorter, with new videos and screenshots of everyday notes.
+
+### Fixed
+
+- In Settings, a switch or value could flip back for a moment when two settings were changed in quick succession.
+
 ## [1.6.1] - 2026-10-04
 
 ### Fixed

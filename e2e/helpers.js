@@ -150,14 +150,50 @@ function xdotool(...args) {
 
 const modKey = process.platform === 'darwin' ? 'Meta' : 'Control';
 
+/**
+ * Switch a note from its formatted view to the editor, the way a person does:
+ * reading mode is turned off with its button, the formatted view is clicked
+ * (here: focused and Enter, so the click never lands on a link or a task box).
+ */
+async function startEditing(page) {
+  if (!(await page.isVisible('#preview'))) return;
+  if ((await page.getAttribute('#btnPreview', 'aria-pressed')) === 'true') {
+    await page.click('#btnPreview');
+  } else {
+    await page.focus('#preview');
+    await page.keyboard.press('Enter');
+  }
+  await page.waitForSelector('#editor:not(.hidden)');
+}
+
 /** Focus the note editor with the caret after the last character. */
 async function focusEditorEnd(page) {
-  if (await page.isVisible('#preview')) await page.click('#btnPreview');
+  await startEditing(page);
   await page.click('#editor');
   await page.evaluate(() => {
     const ta = document.getElementById('editor');
     ta.setSelectionRange(ta.value.length, ta.value.length);
   });
+}
+
+/** The Notes Manager card for a note title. */
+function noteCard(manager, title) {
+  return manager.locator('.note-card', { has: manager.locator('.note-title', { hasText: title }) });
+}
+
+/** Open a card's ⋯ menu in the Notes Manager and choose an item by its label. */
+async function noteMenuAction(manager, title, label) {
+  const card = noteCard(manager, title).first();
+  await card.hover();
+  await card.locator('.card-more').click();
+  await manager.locator('#menu .menu-item', { hasText: label }).click();
+}
+
+/** Leave Settings or Trash for the note list with Escape, as a keyboard user would. */
+async function showNotes(manager) {
+  await manager.evaluate(() => document.activeElement && document.activeElement.blur());
+  await manager.keyboard.press('Escape');
+  await manager.waitForSelector('#notesView:not([hidden])');
 }
 
 module.exports = {
@@ -178,5 +214,9 @@ module.exports = {
   hasXdotool,
   xdotool,
   modKey,
-  focusEditorEnd
+  startEditing,
+  focusEditorEnd,
+  noteCard,
+  noteMenuAction,
+  showNotes
 };

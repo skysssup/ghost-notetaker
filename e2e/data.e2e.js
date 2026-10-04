@@ -16,7 +16,8 @@ const {
   openManager,
   openWindowIds,
   stubDialogs,
-  dialogCalls
+  dialogCalls,
+  noteMenuAction
 } = require('./helpers');
 
 let running = [];
@@ -56,6 +57,7 @@ describe('backup, import, and export', () => {
     const backup = path.join(tempDir(), 'backup.json');
     await stubDialogs(ctx.app, { savePath: backup, openPath: backup });
 
+    await ctx.manager.click('#btnSettings');
     await ctx.manager.click('#btnExport');
     await ctx.manager.waitForSelector('#toast:not(.hidden)');
     assert.match(await ctx.manager.locator('#toast').textContent(), /Exported 1 note to .*backup\.json/);
@@ -95,6 +97,7 @@ describe('backup, import, and export', () => {
       })
     );
     await stubDialogs(ctx.app, { openPath: backup });
+    await ctx.manager.click('#btnSettings');
     await ctx.manager.click('#btnImport');
     await ctx.manager.click('#modalFooter button:has-text("Replace all")');
     await ctx.manager.waitForSelector('#modalTitle:has-text("Import complete")');
@@ -112,6 +115,7 @@ describe('backup, import, and export', () => {
     fs.writeFileSync(bad, '{"notes": [ not json');
     const before = fs.readFileSync(ctx.dataFile, 'utf8');
     await stubDialogs(ctx.app, { openPath: bad });
+    await ctx.manager.click('#btnSettings');
     await ctx.manager.click('#btnImport');
     await ctx.manager.click('#modalFooter button:has-text("Merge")');
     await ctx.manager.waitForSelector('#modalTitle:has-text("Import failed")');
@@ -127,7 +131,7 @@ describe('backup, import, and export', () => {
     await waitForStore(ctx.dataFile, (s) => s.notes[0]?.title === 'Q3/Q4: plan?', 'title on disk');
     const out = path.join(tempDir(), 'out.md');
     await stubDialogs(ctx.app, { savePath: out });
-    await ctx.manager.click('.note-card button:has-text("Export .md")');
+    await noteMenuAction(ctx.manager, 'Q3/Q4: plan?', 'Export as Markdown');
     await ctx.manager.waitForSelector('#toast:not(.hidden)');
     assert.match(fs.readFileSync(out, 'utf8'), /^# Q3\/Q4: plan\?\n\n# Welcome/);
     const [call] = await dialogCalls(ctx.app);

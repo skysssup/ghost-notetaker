@@ -79,4 +79,17 @@ describe('ipc guards', () => {
   it('sanitizeIdList filters junk', () => {
     assert.deepEqual(sanitizeIdList(['a', '', 3, 'b']), ['a', 'b']);
   });
+  it('renderers cannot trash or collapse a note through a plain update', () => {
+    const p = sanitizeNotePatch({ title: 'ok', trashedAt: '2026-01-01T00:00:00.000Z', collapsed: true });
+    assert.deepEqual(p, { title: 'ok' });
+  });
+
+  it('sanitizeSettingsPatch accepts the 1.5 appearance settings and drops bad values', () => {
+    assert.deepEqual(sanitizeSettingsPatch({ theme: 'dark', managerView: 'list', formattedWhenIdle: 0 }), {
+      theme: 'dark',
+      managerView: 'list',
+      formattedWhenIdle: false
+    });
+    assert.deepEqual(sanitizeSettingsPatch({ theme: 'neon', managerView: 'grid', shortcutScopes: { newNote: 'app' } }), {});
+  });
 });

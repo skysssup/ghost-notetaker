@@ -16,7 +16,8 @@ const {
   openWindowIds,
   hasXdotool,
   xdotool,
-  focusEditorEnd
+  focusEditorEnd,
+  startEditing
 } = require('./helpers');
 
 const skip = !hasXdotool() && 'needs Linux/X11 with xdotool';
@@ -87,6 +88,58 @@ describe('desktop integration (X11)', { skip }, () => {
     );
   });
 
+  it('a bubble follows the mouse when dragged and opens where it was dropped', async () => {
+    const ctx = await start();
+    await placeNote(ctx.app, { x: 300, y: 200, width: 360, height: 300 });
+    await ctx.note.click('#btnCollapse');
+    await ctx.note.waitForSelector('#bubble:not([hidden])');
+    const b = await waitFor(async () => {
+      const now = await noteBounds(ctx.app);
+      return now.width < 100 ? now : null;
+    }, 'bubble');
+    const cx = b.x + Math.round(b.width / 2);
+    const cy = b.y + Math.round(b.height / 2);
+    xdotool('mousemove', cx, cy, 'sleep', '0.3', 'mousedown', '1', 'sleep', '0.2',
+      'mousemove', cx + 30, cy + 20, 'sleep', '0.2', 'mousemove', cx + 150, cy + 100, 'sleep', '0.3', 'mouseup', '1');
+    const moved = await waitFor(async () => {
+      const now = await noteBounds(ctx.app);
+      return now.x >= b.x + 100 && now.y >= b.y + 60 ? now : null;
+    }, 'bubble moved by the drag');
+    assert.ok(moved.width < 100, 'a drag must not expand the bubble');
+    // While collapsed, the file keeps the full size at the new position.
+    await waitForStore(
+      ctx.dataFile,
+      (s) => s.notes[0]?.bounds.x === moved.x && s.notes[0]?.bounds.width === 360 && s.notes[0]?.collapsed,
+      'bubble position on disk'
+    );
+
+    xdotool('mousemove', moved.x + 32, moved.y + 32, 'sleep', '0.3', 'click', '1');
+    const expanded = await waitFor(async () => {
+      const now = await noteBounds(ctx.app);
+      return now.width === 360 ? now : null;
+    }, 'expanded by a click');
+    assert.equal(expanded.height, 300);
+    assert.ok(Math.abs(expanded.x - moved.x) <= 2 && Math.abs(expanded.y - moved.y) <= 2, JSON.stringify({ moved, expanded }));
+  });
+
+  it('clicking another window shows the note formatted again', async () => {
+    const ctx = await start();
+    await placeNote(ctx.app, { x: 40, y: 60, width: 360, height: 320 });
+    // Playwright normally reports every page as focused; this test needs real focus changes.
+    const cdp = await ctx.note.context().newCDPSession(ctx.note);
+    await cdp.send('Emulation.setFocusEmulationEnabled', { enabled: false });
+    await startEditing(ctx.note);
+    await ctx.note.keyboard.type('x');
+    const manager = await openManager(ctx.app);
+    const m = await ctx.app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('manager.html')).getContentBounds()
+    );
+    xdotool('mousemove', m.x + Math.round(m.width / 2), m.y + m.height - 40, 'sleep', '0.2', 'click', '1');
+    await ctx.note.waitForSelector('#editor', { state: 'hidden', timeout: 5000 });
+    assert.equal(await ctx.note.isVisible('#preview'), true);
+    assert.ok(manager);
+  });
+
   it('click-through lets clicks fall through until it is turned off in the manager', async () => {
     const ctx = await start();
     await placeNote(ctx.app, { x: 40, y: 60, width: 340, height: 300 });
@@ -111,7 +164,7 @@ describe('desktop integration (X11)', { skip }, () => {
     await new Promise((r) => setTimeout(r, 600));
     assert.equal(await ctx.note.evaluate(() => window.__downs), downs, 'click should pass through the note');
 
-    await manager.locator('.note-card button', { hasText: 'Turn off click-through' }).click();
+    await manager.locator('.note-card .pill.warn').click();
     await waitForStore(ctx.dataFile, (s) => s.notes[0]?.clickThrough === false, 'click-through off');
     await new Promise((r) => setTimeout(r, 300));
     clickNoteBody();
@@ -134,7 +187,7 @@ describe('desktop integration (X11)', { skip }, () => {
     xdotool('key', '--clearmodifiers', 'ctrl+shift+m');
     await manager.waitForSelector('.field-hint.error', { timeout: 5000 });
     assert.match(await manager.locator('.field-hint.error').textContent(), /already used for "Open \/ hide Notes Manager"/);
-    assert.equal(await manager.isVisible('#modal'), true);
+    assert.equal(await manager.isVisible('#settingsView'), true);
     const store = await waitForStore(ctx.dataFile, () => true);
     assert.equal(store.settings.shortcuts.newNote, 'CommandOrControl+Shift+N');
 

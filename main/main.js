@@ -2,7 +2,20 @@
 
 const fs = require('fs');
 const path = require('path');
-const { app, ipcMain, dialog, clipboard, screen, Menu, BrowserWindow, shell } = require('electron');
+const { pathToFileURL } = require('url');
+const {
+  app,
+  ipcMain,
+  dialog,
+  clipboard,
+  screen,
+  Menu,
+  BrowserWindow,
+  shell,
+  nativeTheme,
+  protocol,
+  net
+} = require('electron');
 
 const { flushPendingNotes } = require('./persistence');
 const { Store, NOTE_COLORS, TEMPLATES, defaultShortcuts } = require('./store');
@@ -79,6 +92,11 @@ if (process.platform === 'linux') {
   app.on('session-created', (ses) => ses.setSpellCheckerLanguages([]));
 }
 
+// Images pasted into notes are served from the notes folder as ghost-image://img/<name>.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ghost-image', privileges: { standard: true, secure: true } }
+]);
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   allowQuit = true;
@@ -95,6 +113,14 @@ function storePath() {
 
 function logError(err) {
   console.error(err);
+}
+
+function collectImageGarbage() {
+  try {
+    store.collectImageGarbage();
+  } catch (err) {
+    logError(err);
+  }
 }
 
 /** Tell every window whether the notes file is currently being written. */
@@ -140,7 +166,7 @@ async function createNote(options = {}) {
     displayId: bounds.displayId,
     visible: true
   });
-  await notes.open(note.id);
+  await notes.open(note.id, { edit: options.edit !== false });
   refreshManagerAndTray();
   return note;
 }
@@ -233,6 +259,17 @@ function dialogParent(event) {
   return win && !win.isDestroyed() ? win : undefined;
 }
 
+/** Show a note from the Notes Manager or tray: always the full note, never a bubble. */
+async function openNoteExpanded(noteId) {
+  const note = store.getNote(noteId);
+  if (!note || note.trashedAt) return null;
+  if (notes.get(noteId)) notes.setCollapsed(noteId, false);
+  store.updateNote(noteId, { visible: true, collapsed: false });
+  await notes.open(noteId);
+  refreshManagerAndTray();
+  return store.getNote(noteId);
+}
+
 async function flushNoteOrThrow(noteId, action) {
   const result = await notes.flushWindow(notes.get(noteId));
   if (!result.ok) {
@@ -251,6 +288,8 @@ function registerIpc() {
     version: app.getVersion(),
     capabilities: capabilities(),
     dataFile: storePath(),
+    backupDir: store.backupDir,
+    darkMode: nativeTheme.shouldUseDarkColors,
     saveError: store.getLastSaveError() ? store.getLastSaveError().message : null
   }));
 
@@ -261,6 +300,7 @@ function registerIpc() {
     if (typeof f.tag === 'string') safe.tag = f.tag.slice(0, 64);
     if (typeof f.query === 'string') safe.query = f.query.slice(0, 200);
     if (f.visible === true || f.visible === false) safe.visible = f.visible;
+    if (f.trashed === true) safe.trashed = true;
     if (typeof f.sortBy === 'string') safe.sortBy = f.sortBy;
     return store.listNotes(safe);
   });
@@ -302,21 +342,58 @@ function registerIpc() {
     return true;
   });
 
-  handle('notes:open', async (_e, id) => {
+  handle('notes:open', (_e, id) => openNoteExpanded(requireId(id, 'noteId')));
+
+  handle('notes:trash', async (_e, id) => {
     const noteId = requireId(id, 'noteId');
-    if (!store.getNote(noteId)) return null;
-    store.updateNote(noteId, { visible: true });
-    await notes.open(noteId);
+    await flushNoteOrThrow(noteId, 'moving it to the trash');
+    notes.closeAndDestroy(noteId);
+    const note = store.trashNote(noteId);
     refreshManagerAndTray();
-    return store.getNote(noteId);
+    return note;
+  });
+
+  handle('notes:restore', (_e, id) => {
+    const note = store.restoreNote(requireId(id, 'noteId'));
+    refreshManagerAndTray();
+    return note;
   });
 
   handle('notes:delete', (_e, id) => {
     const noteId = requireId(id, 'noteId');
     notes.closeAndDestroy(noteId);
     const ok = store.deleteNote(noteId);
+    collectImageGarbage();
     refreshManagerAndTray();
     return ok;
+  });
+
+  handle('notes:emptyTrash', () => {
+    const removed = store.emptyTrash();
+    collectImageGarbage();
+    refreshManagerAndTray();
+    return removed;
+  });
+
+  handle('notes:setCollapsed', (e, id, collapsed) => {
+    const noteId = requireId(id, 'noteId');
+    assertFromManagerOrNote(e, noteId);
+    return notes.setCollapsed(noteId, Boolean(collapsed));
+  });
+
+  handle('notes:moveBy', (e, id, dx, dy) => {
+    const noteId = requireId(id, 'noteId');
+    assertFromNote(e, noteId);
+    const step = (v) => (Number.isFinite(v) ? Math.max(-4000, Math.min(4000, v)) : 0);
+    notes.moveBy(noteId, step(dx), step(dy));
+  });
+
+  handle('images:save', (e, id, bytes) => {
+    const noteId = requireId(id, 'noteId');
+    assertFromNote(e, noteId);
+    if (!(bytes instanceof Uint8Array)) throw new Error('Invalid image data');
+    const name = store.saveImage(Buffer.from(bytes));
+    return `ghost-image://img/${name}`;
   });
 
   handle('notes:duplicate', async (_e, id) => {
@@ -464,6 +541,12 @@ function registerIpc() {
     if (Object.prototype.hasOwnProperty.call(safe, 'globalClickThrough')) {
       notes.setGlobalClickThrough(s.globalClickThrough);
     }
+    if (Object.prototype.hasOwnProperty.call(safe, 'theme')) {
+      nativeTheme.themeSource = s.theme;
+    }
+    if (Object.prototype.hasOwnProperty.call(safe, 'formattedWhenIdle')) {
+      notes.broadcast('note:settings', { formattedWhenIdle: s.formattedWhenIdle });
+    }
     refreshManagerAndTray();
     return s;
   });
@@ -477,7 +560,42 @@ function registerIpc() {
     }
     return applyShortcutBindings({ [id]: accel });
   });
-  handle('shortcuts:reset', () => applyShortcutBindings(defaultShortcuts()));
+  handle('shortcuts:reset', () => {
+    store.updateSettings({ shortcutScopes: Object.fromEntries(SHORTCUT_ACTIONS.map((a) => [a.id, 'global'])) });
+    return applyShortcutBindings(defaultShortcuts());
+  });
+  handle('shortcuts:setScope', (_e, id, scope) => {
+    const def = SHORTCUT_ACTIONS.find((a) => a.id === id);
+    if (!def || def.scope !== 'global' || !['global', 'app'].includes(scope)) {
+      throw new Error('This shortcut cannot change scope');
+    }
+    store.updateSettings({ shortcutScopes: { [id]: scope } });
+    const list = shortcuts.registerGlobal();
+    refreshManagerAndTray();
+    return list;
+  });
+
+  handle('backups:list', () => store.listBackups());
+  handle('backups:create', async () => {
+    await flushPendingNotes(notes, store);
+    return store.createBackup({ force: true });
+  });
+  handle('backups:restore', async (_e, name) => {
+    const raw = store.readBackup(name);
+    await flushPendingNotes(notes, store);
+    // Keep a copy of the notes as they are now, so the restore can be undone.
+    const safety = store.createBackup({ force: true });
+    const result = store.importAll(raw, 'replace');
+    notes.destroyAll();
+    await notes.openVisibleNotes();
+    refreshManagerAndTray();
+    return { ...result, safety };
+  });
+  handle('app:revealBackups', () => {
+    fs.mkdirSync(store.backupDir, { recursive: true, mode: 0o700 });
+    shell.openPath(store.backupDir);
+    return true;
+  });
   handle('shortcuts:pause', (_e, paused) => {
     shortcuts.pause(Boolean(paused));
     return true;
@@ -521,11 +639,12 @@ function welcomeNoteContent() {
     '',
     'This note floats above other windows. Hover it to show its controls and drag the top bar to move it.',
     '',
-    `- Open the **Notes Manager** from the tray icon${managerKey ? ` or with ${managerKey}` : ''}.`,
-    '- **✕** hides a note. Only the Notes Manager deletes notes.',
-    '- The eye button switches to the Markdown preview, where these boxes can be ticked:',
+    '- **Click the text** to edit it. When you click elsewhere, the note shows formatted Markdown again.',
+    '- **–** shrinks the note to a small bubble. Click the bubble to open it again.',
+    `- **✕** hides the note. Find every note in the **Notes Manager**: tray icon${managerKey ? ` or ${managerKey}` : ''}.`,
     '',
     '- [ ] Move this note somewhere handy',
+    '- [ ] Paste a screenshot into a note',
     '- [ ] Open the Notes Manager',
     '',
     protection,
@@ -576,6 +695,31 @@ async function boot() {
     store.acknowledgeCorruptRecovery();
   }
 
+  // Daily housekeeping: back up the notes file, purge month-old trash, and
+  // delete image files nothing refers to. None of it may stop the app from
+  // starting, and the hourly re-run covers sessions that stay open for days.
+  const housekeeping = () => {
+    for (const task of [() => store.createBackup(), () => store.purgeTrash(), () => store.collectImageGarbage()]) {
+      try {
+        task();
+      } catch (err) {
+        logError(err);
+      }
+    }
+    if (manager) refreshManagerAndTray();
+  };
+  housekeeping();
+  setInterval(housekeeping, 60 * 60 * 1000).unref();
+
+  nativeTheme.themeSource = store.getSettings().theme;
+  nativeTheme.on('updated', () => refreshManagerAndTray());
+  protocol.handle('ghost-image', (request) => {
+    const url = new URL(request.url);
+    const file = url.host === 'img' ? store.imagePath(decodeURIComponent(url.pathname.slice(1))) : null;
+    if (!file || !fs.existsSync(file)) return new Response('Not found', { status: 404 });
+    return net.fetch(pathToFileURL(file).toString());
+  });
+
   if (capabilities().launchAtLogin) {
     if (store.getSettings().launchAtLogin) {
       applyLaunchAtLogin(true);
@@ -599,6 +743,7 @@ async function boot() {
 
   shortcuts = new ShortcutController({
     getBindings: () => store.getSettings().shortcuts || {},
+    getScopes: () => store.getSettings().shortcutScopes || {},
     onAction: handleShortcutAction
   });
   shortcuts.registerGlobal();
@@ -616,11 +761,7 @@ async function boot() {
     newNote: safe(() => createNote()),
     newNoteFromTemplate: safe((templateId) => createNote({ templateId })),
     quickCapture: safe(quickCapture),
-    openNote: safe(async (id) => {
-      store.updateNote(id, { visible: true });
-      await notes.open(id);
-      refreshManagerAndTray();
-    }),
+    openNote: safe(openNoteExpanded),
     openManager: () => manager.open(),
     openSettings: () => {
       manager.open();
@@ -649,13 +790,13 @@ async function boot() {
   screen.on('display-metrics-changed', () => notes.clampAllToDisplays());
 
   if (store.listNotes().length === 0) {
-    const welcome = await createNote({
+    await createNote({
       templateId: 'blank',
       title: 'Ghost Notetaker',
       content: welcomeNoteContent(),
-      bounds: cursorNearbyBounds({ width: 400, height: 430 })
+      bounds: cursorNearbyBounds({ width: 400, height: 470 }),
+      edit: false
     });
-    store.updateNote(welcome.id, { previewMode: true });
   } else {
     await notes.openVisibleNotes();
   }

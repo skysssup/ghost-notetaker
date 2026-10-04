@@ -14,8 +14,32 @@ const {
   noteWindow,
   openWindowIds,
   stubOpenExternal,
-  modKey
+  modKey,
+  startEditing
 } = require('./helpers');
+
+// A 2x2 PNG, as a screenshot pasted from the clipboard would arrive.
+const PNG_B64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=';
+
+async function pasteFile(note, { base64, name, type }) {
+  await note.evaluate(
+    ({ base64: b64, name: fileName, type: mime }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([bytes], fileName, { type: mime }));
+      const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+      document.getElementById('editor').dispatchEvent(event);
+    },
+    { base64, name, type }
+  );
+}
+
+const windowBounds = (app, id) =>
+  app.evaluate(({ BrowserWindow }, noteId) => {
+    const win = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes(`id=${noteId}`));
+    return win ? win.getBounds() : null;
+  }, id);
 
 let running = [];
 afterEach(async () => {
@@ -30,7 +54,7 @@ async function start(options) {
 }
 
 async function replaceEditorText(note, text) {
-  if (await note.isVisible('#preview')) await note.click('#btnPreview');
+  await startEditing(note);
   await note.click('#editor');
   await note.keyboard.press(`${modKey}+A`);
   await note.keyboard.press('Delete');
@@ -38,13 +62,14 @@ async function replaceEditorText(note, text) {
 }
 
 describe('sticky notes', () => {
-  it('first launch shows a welcome note in Markdown preview and creates the notes file', async () => {
+  it('first launch shows the welcome note formatted and creates the notes file', async () => {
     const { app, dataFile } = await start();
     const note = await firstNote(app);
     assert.equal(await note.inputValue('#title'), 'Ghost Notetaker');
     await note.waitForSelector('#preview:not(.hidden)');
+    assert.equal(await note.isVisible('#editor'), false);
     assert.equal(await note.locator('#preview h1').textContent(), 'Welcome');
-    assert.equal(await note.locator('#preview .task-check').count(), 2);
+    assert.equal(await note.locator('#preview .task-check').count(), 3);
     const store = await waitForStore(dataFile, (s) => s.notes.length === 1, 'welcome note on disk');
     assert.equal(store.notes[0].visible, true);
     const welcome = store.notes[0].content;
@@ -55,7 +80,7 @@ describe('sticky notes', () => {
   it('does not download spellcheck dictionaries on Linux', { skip: process.platform !== 'linux' }, async () => {
     const { app, userDataDir } = await start();
     const note = await firstNote(app);
-    await note.click('#btnPreview');
+    await startEditing(note);
     await note.click('#editor');
     await note.keyboard.type(' speling mistake');
     await new Promise((r) => setTimeout(r, 3000));
@@ -127,7 +152,7 @@ describe('sticky notes', () => {
     const note = await firstNote(app);
     const id = noteIdOf(note);
     await replaceEditorText(note, '- [ ] alpha\n- [x] beta [ ] literal');
-    await note.click('#btnPreview');
+    await note.keyboard.press('Escape');
     await note.waitForSelector('#preview:not(.hidden)');
     const boxes = note.locator('#preview .task-check');
     assert.equal(await boxes.count(), 2);
@@ -146,7 +171,7 @@ describe('sticky notes', () => {
     const note = await firstNote(app);
     const url = note.url();
     await replaceEditorText(note, 'See [the docs](https://example.com/docs) and `[x](https://not-a-link)`');
-    await note.click('#btnPreview');
+    await note.keyboard.press('Escape');
     assert.equal(await note.locator('#preview code').textContent(), '[x](https://not-a-link)');
     await note.click('#preview a');
     await waitFor(async () => (await app.evaluate(() => globalThis.__opened)).length === 1, 'openExternal');
@@ -177,7 +202,10 @@ describe('sticky notes', () => {
     const note = await firstNote(app);
     const id = noteIdOf(note);
     await note.click('#btnMore');
+    await note.click('#palette [data-color="indigo"]');
+    await waitFor(async () => note.evaluate(() => document.getElementById('shell').classList.contains('ink-light')), 'light text on a dark note');
     await note.click('#palette [aria-label="Mint"]');
+    assert.equal(await note.evaluate(() => document.getElementById('shell').classList.contains('ink-light')), false);
     await note.locator('#fontSize').fill('18');
     await note.locator('#opacity').fill('60');
     await note.click('#btnMono');
@@ -244,5 +272,95 @@ describe('sticky notes', () => {
     assert.ok(layout.title >= 32, `title squeezed: ${JSON.stringify(layout)}`);
     assert.ok(layout.panelRight <= layout.width, `panel overflows: ${JSON.stringify(layout)}`);
     assert.ok(layout.panelBottom <= layout.height, `panel overflows: ${JSON.stringify(layout)}`);
+  });
+  it('clicking the formatted note edits at that line; leaving it shows the formatting again', async () => {
+    const { app, dataFile } = await start();
+    const note = await firstNote(app);
+    const id = noteIdOf(note);
+    await replaceEditorText(note, '# Plan\n\nfirst point\n\nsecond point');
+    await note.keyboard.press('Escape');
+    await note.waitForSelector('#preview:not(.hidden)');
+    assert.equal(await note.locator('#preview h1').textContent(), 'Plan');
+
+    await note.locator('#preview p', { hasText: 'second point' }).click();
+    await note.waitForSelector('#editor:not(.hidden)');
+    const caret = await note.evaluate(() => {
+      const ta = document.getElementById('editor');
+      return { focused: document.activeElement === ta, at: ta.selectionStart, end: ta.value.length };
+    });
+    assert.deepEqual(caret, { focused: true, at: caret.end, end: caret.end });
+    await note.keyboard.type('!');
+    await waitForStore(dataFile, (s) => s.notes.find((n) => n.id === id)?.content.endsWith('second point!'), 'typed at the clicked line');
+
+    // Reading mode keeps the formatted view even when the text is clicked.
+    await note.keyboard.press('Escape');
+    await note.click('#btnPreview');
+    await note.locator('#preview p', { hasText: 'first point' }).click();
+    assert.equal(await note.isVisible('#editor'), false);
+    await waitForStore(dataFile, (s) => s.notes.find((n) => n.id === id)?.previewMode === true, 'reading mode on disk');
+  });
+
+  it('collapses to a bubble, stays a bubble after a restart, and expands to its old size', async () => {
+    const first = await start();
+    let note = await firstNote(first.app);
+    const id = noteIdOf(note);
+    const full = await windowBounds(first.app, id);
+    await note.click('#btnCollapse');
+    await waitFor(async () => (await windowBounds(first.app, id)).width < 100, 'bubble size');
+    await note.waitForSelector('#bubble:not([hidden])');
+    assert.equal(await note.isVisible('#shell'), false);
+    await waitForStore(first.dataFile, (s) => s.notes[0]?.collapsed === true, 'collapsed on disk');
+    await first.app.close();
+    running = [];
+
+    const second = await start({ userDataDir: first.userDataDir });
+    note = await noteWindow(second.app, id);
+    await note.waitForSelector('#bubble:not([hidden])');
+    assert.ok((await windowBounds(second.app, id)).width < 100);
+    await note.click('#bubble');
+    await waitFor(async () => (await windowBounds(second.app, id)).width === full.width, 'expanded size');
+    assert.equal((await windowBounds(second.app, id)).height, full.height);
+    await note.waitForSelector('#shell', { state: 'visible' });
+    await waitForStore(second.dataFile, (s) => s.notes[0]?.collapsed === false, 'expanded on disk');
+  });
+
+  it('a pasted image is stored beside the notes file and shown in the formatted note', async () => {
+    const { app, dataFile, userDataDir } = await start();
+    const note = await firstNote(app);
+    const id = noteIdOf(note);
+    await replaceEditorText(note, 'Screenshot:\n');
+    await pasteFile(note, { base64: PNG_B64, name: 'board.png', type: 'image/png' });
+    const store = await waitForStore(dataFile, (s) => /!\[board\]\(ghost-image:\/\/img\/[a-f0-9]{16}\.png\)/.test(s.notes.find((n) => n.id === id)?.content), 'image link on disk');
+    const name = /img\/([a-f0-9]{16}\.png)/.exec(store.notes.find((n) => n.id === id).content)[1];
+    assert.deepEqual(fs.readFileSync(path.join(userDataDir, 'images', name)), Buffer.from(PNG_B64, 'base64'));
+
+    await note.keyboard.press('Escape');
+    await note.waitForSelector('#preview img');
+    await waitFor(async () => (await note.evaluate(() => document.querySelector('#preview img').naturalWidth)) === 2, 'image loaded');
+
+    // A file that only claims to be an image is refused by the main process.
+    await startEditing(note);
+    await pasteFile(note, { base64: Buffer.from('not really a png at all').toString('base64'), name: 'fake.png', type: 'image/png' });
+    await note.waitForSelector('#saveStatus:not([hidden])');
+    assert.match(await note.locator('#saveStatus').textContent(), /Only PNG, JPEG, GIF, and WebP/);
+    assert.equal(fs.readdirSync(path.join(userDataDir, 'images')).length, 1);
+  });
+  it('an image dropped on the formatted note is added where editing resumes', async () => {
+    const { app, dataFile } = await start();
+    const note = await firstNote(app);
+    const id = noteIdOf(note);
+    await note.waitForSelector('#preview:not(.hidden)');
+    await note.evaluate((b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }));
+      const target = document.getElementById('preview');
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        target.dispatchEvent(new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true }));
+      }
+    }, PNG_B64);
+    await waitForStore(dataFile, (s) => /!\[dropped\]\(ghost-image:\/\/img\/[a-f0-9]{16}\.png\)/.test(s.notes.find((n) => n.id === id)?.content), 'dropped image on disk');
+    assert.equal(await note.isVisible('#editor'), true);
+    assert.equal(note.url().includes('note.html'), true, 'a drop must not navigate the note window');
   });
 });

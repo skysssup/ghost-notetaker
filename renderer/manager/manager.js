@@ -7,20 +7,34 @@
   }
 
   const api = window.ghostManager;
+  const md = window.GhostMarkdown;
+  // The main process resolves System/Light/Dark; the query avoids a flash before the first answer.
+  document.documentElement.dataset.theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark';
+  const TRASH_DAYS = 30;
   const state = {
     bootstrap: null,
     notes: [],
+    allNotes: [],
+    trash: [],
     workspaces: [],
     tags: [],
     recent: [],
+    backups: [],
     activeWorkspaceId: null,
     selectedTag: null,
     query: '',
     visibility: 'all',
     sortBy: 'updated',
+    layout: 'board',
+    view: 'notes',
     selected: new Set(),
+    focusId: null,
+    renamingId: null,
+    pendingRender: false,
     searchTimer: null,
-    recording: null
+    recording: null,
+    menuAnchor: null,
+    renderedSignature: ''
   };
 
   const $ = (id) => document.getElementById(id);
@@ -29,44 +43,76 @@
     tagList: $('tagList'),
     recentList: $('recentList'),
     noteList: $('noteList'),
+    notesScroller: $('notesScroller'),
     empty: $('empty'),
     emptyTitle: $('emptyTitle'),
     emptyText: $('emptyText'),
     search: $('search'),
-    visibilityFilter: $('visibilityFilter'),
+    searchHint: $('searchHint'),
     sortBy: $('sortBy'),
-    templateSelect: $('templateSelect'),
+    btnBoard: $('btnBoard'),
+    btnList: $('btnList'),
     btnNewNote: $('btnNewNote'),
+    btnTemplates: $('btnTemplates'),
     btnEmptyNew: $('btnEmptyNew'),
     btnNewWs: $('btnNewWs'),
+    btnTrash: $('btnTrash'),
+    trashCount: $('trashCount'),
     btnSettings: $('btnSettings'),
     btnShortcuts: $('btnShortcuts'),
-    btnExport: $('btnExport'),
-    btnImport: $('btnImport'),
+    viewTitle: $('viewTitle'),
+    viewSub: $('viewSub'),
+    countAll: $('countAll'),
+    countOpen: $('countOpen'),
+    countHidden: $('countHidden'),
+    filterChips: $('filterChips'),
+    bulkBar: $('bulkBar'),
     selectAll: $('selectAll'),
     btnBulkShow: $('btnBulkShow'),
     btnBulkHide: $('btnBulkHide'),
+    btnBulkTrash: $('btnBulkTrash'),
     selCount: $('selCount'),
+    notesView: $('notesView'),
+    trashView: $('trashView'),
+    trashList: $('trashList'),
+    trashEmpty: $('trashEmpty'),
+    btnEmptyTrash: $('btnEmptyTrash'),
+    settingsView: $('settingsView'),
+    settingsBody: $('settingsBody'),
+    settingsScroller: $('settingsScroller'),
+    settingsSaved: $('settingsSaved'),
+    menu: $('menu'),
     toast: $('toast'),
+    toastText: $('toastText'),
+    toastAction: $('toastAction'),
     saveBanner: $('saveBanner'),
     modal: $('modal'),
     modalCard: $('modalCard'),
     modalTitle: $('modalTitle'),
     modalBody: $('modalBody'),
     modalFooter: $('modalFooter'),
-    modalClose: $('modalClose')
+    modalClose: $('modalClose'),
+    brandSub: $('brandSub')
   };
 
-  const COLOR_MAP = {};
   let lastFocus = null;
   let toastTimer = null;
+  let toastAction = null;
+  let savedTimer = null;
+  let reloadSeq = 0;
+  let listSeq = 0;
 
-  function colorHex(id) {
-    return COLOR_MAP[id] || '#c8d6e5';
-  }
+  // ---------- helpers ----------
 
   function isMac() {
     return Boolean(state.bootstrap && state.bootstrap.platform === 'darwin');
+  }
+
+  const modLabel = () => (isMac() ? '⌘' : 'Ctrl+');
+
+  function colorOf(id) {
+    const colors = (state.bootstrap && state.bootstrap.colors) || [];
+    return colors.find((c) => c.id === id) || { id, hex: '#c8d6e5', ink: 'dark', label: id };
   }
 
   function formatRelative(iso) {
@@ -77,36 +123,41 @@
     const min = Math.round(sec / 60);
     if (min < 60) return `${min} min ago`;
     const hr = Math.round(min / 60);
-    if (hr < 48) return `${hr} h ago`;
+    if (hr < 24) return `${hr} h ago`;
     const day = Math.round(hr / 24);
+    if (day === 1) return 'yesterday';
     if (day < 30) return `${day} days ago`;
     return new Date(iso).toLocaleDateString();
   }
 
-  /** Plain-text preview of a note; skips a leading heading that repeats the title. */
-  function snippet(note) {
-    let text = String(note.content || '');
+  function formatBytes(n) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  /** Note text without a first heading that only repeats the title. */
+  function bodyText(note) {
+    const text = String(note.content || '');
     const firstLine = text.split('\n', 1)[0];
     const heading = /^#+\s+(.*)$/.exec(firstLine);
     if (heading && heading[1].trim().toLowerCase() === String(note.title || '').trim().toLowerCase()) {
-      text = text.slice(firstLine.length);
+      return text.slice(firstLine.length).replace(/^\s*\n/, '');
     }
-    return text
+    return text;
+  }
+
+  /** Plain-text preview of a note. */
+  function snippet(note) {
+    return bodyText(note)
       .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
       .replace(/^#+\s+/gm, '')
       .replace(/^\s*[-*]\s+\[[ xX]\]\s*/gm, '')
       .replace(/[*_`[\]()>|~-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 300);
-  }
-
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   }
 
   /** ipcRenderer.invoke prefixes main-process errors; show only the message. */
@@ -118,6 +169,7 @@
   function el(tag, props = {}, children = []) {
     const node = document.createElement(tag);
     for (const [key, value] of Object.entries(props)) {
+      if (value === undefined) continue;
       if (key === 'class') node.className = value;
       else if (key === 'text') node.textContent = value;
       else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
@@ -128,6 +180,19 @@
     return node;
   }
 
+  function icon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'ico');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.appendChild(use);
+    return svg;
+  }
+
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const noteById = (id) => state.notes.find((n) => n.id === id) || state.allNotes.find((n) => n.id === id);
+
   function renderSaveBanner(message) {
     els.saveBanner.hidden = !message;
     els.saveBanner.textContent = message
@@ -135,12 +200,29 @@
       : '';
   }
 
-  function showToast(message) {
-    els.toast.textContent = message;
+  // ---------- toast ----------
+
+  function hideToast() {
+    els.toast.classList.add('hidden');
+    toastAction = null;
+  }
+
+  /** A short message at the bottom; `action` adds a button such as Undo. */
+  function showToast(message, action) {
+    els.toastText.textContent = message;
+    toastAction = action || null;
+    els.toastAction.hidden = !action;
+    if (action) els.toastAction.textContent = action.label;
     els.toast.classList.remove('hidden');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => els.toast.classList.add('hidden'), 5000);
+    toastTimer = setTimeout(hideToast, action ? 8000 : 5000);
   }
+
+  els.toastAction.addEventListener('click', async () => {
+    const action = toastAction;
+    hideToast();
+    if (action) await action.onClick();
+  });
 
   // ---------- modal ----------
 
@@ -153,7 +235,6 @@
   }
 
   function closeModal() {
-    if (state.recording) stopRecording();
     els.modal.classList.add('hidden');
     els.modalBody.textContent = '';
     els.modalFooter.textContent = '';
@@ -164,7 +245,7 @@
   }
 
   function onModalKeydown(e) {
-    if (els.modal.classList.contains('hidden') || state.recording) return;
+    if (els.modal.classList.contains('hidden')) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -190,6 +271,7 @@
    * disable the footer while running and report failures inside the dialog.
    */
   function openModal({ title, body, footerButtons, wide }) {
+    closeMenu();
     if (els.modal.classList.contains('hidden')) lastFocus = document.activeElement;
     els.modalTitle.textContent = title;
     els.modalBody.replaceChildren(...(Array.isArray(body) ? body : [body]));
@@ -253,7 +335,7 @@
     });
   }
 
-  /** Run a list action; failures are shown instead of silently ignored. */
+  /** Run an action; failures are shown instead of silently ignored. */
   async function run(title, fn) {
     try {
       return await fn();
@@ -271,81 +353,282 @@
   });
 
   function field(label, input, hint) {
-    const id = input.id;
     return el('div', { class: 'field' }, [
-      el('label', { for: id, text: label }),
+      el('label', { for: input.id, text: label }),
       input,
       ...(hint ? [el('p', { class: 'field-hint', text: hint })] : [])
     ]);
+  }
+
+  // ---------- menu ----------
+
+  function menuItems() {
+    return Array.from(els.menu.querySelectorAll('.menu-item:not([disabled]), .swatch-btn'));
+  }
+
+  function closeMenu({ restoreFocus = false } = {}) {
+    if (els.menu.classList.contains('hidden')) return;
+    els.menu.classList.add('hidden');
+    els.menu.textContent = '';
+    const anchor = state.menuAnchor;
+    state.menuAnchor = null;
+    if (anchor) {
+      anchor.setAttribute('aria-expanded', 'false');
+      if (restoreFocus && document.contains(anchor)) anchor.focus();
+    }
+    if (state.pendingRender) renderNotes();
+  }
+
+  /**
+   * items: { label, icon?, hint?, danger?, attrs?, onSelect } | 'sep' |
+   * { swatches, current, label, onPick }. Opens under `anchor` or at `point`.
+   */
+  function openMenu(items, { anchor = null, point = null, label = 'Actions' } = {}) {
+    closeMenu();
+    const nodes = items.map((item) => {
+      if (item === 'sep') return el('div', { class: 'menu-sep', role: 'separator' });
+      if (item.swatches) {
+        return el(
+          'div',
+          { class: 'menu-colors', role: 'group', 'aria-label': item.label },
+          [
+            el('span', { class: 'menu-colors-label', text: item.label }),
+            el(
+              'div',
+              { class: 'swatches' },
+              item.swatches.map((c) =>
+                el('button', {
+                  type: 'button',
+                  class: 'swatch-btn',
+                  role: 'menuitemradio',
+                  'aria-checked': String(c.id === item.current),
+                  'aria-label': c.label,
+                  title: c.label,
+                  'data-color': c.id,
+                  style: `background:${c.hex}`,
+                  onclick: () => {
+                    closeMenu({ restoreFocus: true });
+                    item.onPick(c.id);
+                  }
+                })
+              )
+            )
+          ]
+        );
+      }
+      return el(
+        'button',
+        {
+          type: 'button',
+          class: `menu-item${item.danger ? ' danger' : ''}`,
+          role: 'menuitem',
+          disabled: item.disabled,
+          ...(item.attrs || {}),
+          onclick: () => {
+            closeMenu({ restoreFocus: true });
+            item.onSelect();
+          }
+        },
+        [
+          ...(item.icon ? [icon(item.icon)] : []),
+          ...(item.swatch ? [el('span', { class: 'menu-swatch', style: `background:${item.swatch}` })] : []),
+          el('span', { text: item.label }),
+          ...(item.hint ? [el('span', { class: 'hint', text: item.hint })] : [])
+        ]
+      );
+    });
+    els.menu.replaceChildren(...nodes);
+    els.menu.setAttribute('aria-label', label);
+    els.menu.classList.remove('hidden');
+    const rect = anchor
+      ? anchor.getBoundingClientRect()
+      : { left: point.x, right: point.x, top: point.y, bottom: point.y };
+    const w = els.menu.offsetWidth;
+    const h = els.menu.offsetHeight;
+    let left = anchor ? rect.right - w : rect.left;
+    let top = rect.bottom + 4;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 4);
+    left = Math.min(Math.max(8, left), window.innerWidth - w - 8);
+    els.menu.style.left = `${left}px`;
+    els.menu.style.top = `${top}px`;
+    state.menuAnchor = anchor;
+    if (anchor) anchor.setAttribute('aria-expanded', 'true');
+    const first = menuItems()[0];
+    if (first) first.focus();
+  }
+
+  els.menu.addEventListener('keydown', (e) => {
+    const items = menuItems();
+    const i = items.indexOf(document.activeElement);
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu({ restoreFocus: true });
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      items[(i + 1) % items.length].focus();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      items[(i - 1 + items.length) % items.length].focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0].focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1].focus();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      closeMenu({ restoreFocus: true });
+    }
+  });
+
+  document.addEventListener(
+    'mousedown',
+    (e) => {
+      if (!els.menu.classList.contains('hidden') && !els.menu.contains(e.target)) {
+        const onAnchor = state.menuAnchor && state.menuAnchor.contains(e.target);
+        closeMenu();
+        // A click on the anchor that opened the menu just closes it.
+        if (onAnchor) e.target.closest('button').dataset.justClosed = '1';
+      }
+    },
+    true
+  );
+  window.addEventListener('blur', () => closeMenu());
+  window.addEventListener('resize', () => closeMenu());
+
+  function anchorJustClosed(btn) {
+    if (btn.dataset.justClosed) {
+      delete btn.dataset.justClosed;
+      return true;
+    }
+    return false;
+  }
+
+  // ---------- views ----------
+
+  function showView(view, { section } = {}) {
+    if (state.recording) stopRecording();
+    closeMenu();
+    state.view = view;
+    els.notesView.hidden = view !== 'notes';
+    els.trashView.hidden = view !== 'trash';
+    els.settingsView.hidden = view !== 'settings';
+    els.btnTrash.classList.toggle('active', view === 'trash');
+    els.btnTrash.setAttribute('aria-current', view === 'trash' ? 'page' : 'false');
+    const inSettings = view === 'settings';
+    els.btnSettings.classList.toggle('active', inSettings && section !== 'setShortcuts');
+    els.btnShortcuts.classList.toggle('active', inSettings && section === 'setShortcuts');
+    renderWorkspaces();
+    if (view === 'trash') renderTrash();
+    if (inSettings) {
+      renderSettings();
+      const target = section ? $(section) : null;
+      els.settingsScroller.style.scrollBehavior = 'auto';
+      els.settingsScroller.scrollTop = target ? target.offsetTop - 12 : 0;
+      els.settingsScroller.style.scrollBehavior = '';
+      updateSettingsNav();
+    }
   }
 
   // ---------- sidebar ----------
 
   function renderWorkspaces() {
     els.wsList.textContent = '';
+    const counts = new Map();
+    for (const n of state.allNotes) counts.set(n.workspaceId, (counts.get(n.workspaceId) || 0) + 1);
     state.workspaces.forEach((ws) => {
-      const active = ws.id === state.activeWorkspaceId;
-      const row = el('li', { class: 'side-row' }, [
-        el('button', {
-          type: 'button',
-          class: `side-btn${active ? ' active' : ''}`,
-          'aria-current': active ? 'true' : 'false',
-          text: ws.name,
-          onclick: async () => {
-            await api.setActiveWorkspace(ws.id);
-            state.activeWorkspaceId = ws.id;
-            state.selectedTag = null;
-            state.selected.clear();
-            await reload();
-          }
-        }),
-        el('button', {
-          type: 'button',
-          class: 'row-btn',
-          title: `Rename ${ws.name}`,
-          'aria-label': `Rename workspace ${ws.name}`,
-          text: '✎',
-          onclick: () => promptRenameWorkspace(ws)
-        })
-      ]);
-      if (state.workspaces.length > 1) {
-        row.appendChild(
-          el('button', {
+      const active = state.view === 'notes' && ws.id === state.activeWorkspaceId;
+      const actions = [
+        el(
+          'button',
+          {
             type: 'button',
-            class: 'row-btn danger',
-            title: `Delete ${ws.name}`,
-            'aria-label': `Delete workspace ${ws.name}`,
-            text: '✕',
-            onclick: () => confirmDeleteWorkspace(ws)
-          })
+            class: 'row-btn',
+            title: `Rename ${ws.name}`,
+            'aria-label': `Rename workspace ${ws.name}`,
+            onclick: () => promptRenameWorkspace(ws)
+          },
+          [icon('pencil')]
+        )
+      ];
+      if (state.workspaces.length > 1) {
+        actions.push(
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'row-btn danger',
+              title: `Delete ${ws.name}`,
+              'aria-label': `Delete workspace ${ws.name}`,
+              onclick: () => confirmDeleteWorkspace(ws)
+            },
+            [icon('trash')]
+          )
         );
       }
-      els.wsList.appendChild(row);
+      els.wsList.appendChild(
+        el('li', { class: 'side-row' }, [
+          el(
+            'button',
+            {
+              type: 'button',
+              class: `side-btn${active ? ' active' : ''}`,
+              'aria-current': active ? 'true' : 'false',
+              onclick: () => selectWorkspace(ws.id)
+            },
+            [icon('folder'), el('span', { class: 'label', text: ws.name }), el('span', { class: 'count', text: String(counts.get(ws.id) || 0) })]
+          ),
+          el('span', { class: 'row-actions' }, actions)
+        ])
+      );
     });
+  }
+
+  async function selectWorkspace(id) {
+    try {
+      if (id !== state.activeWorkspaceId) {
+        await api.setActiveWorkspace(id);
+        state.activeWorkspaceId = id;
+        state.selectedTag = null;
+        state.selected.clear();
+        state.focusId = null;
+      }
+      showView('notes');
+      await reload();
+    } catch (err) {
+      showActionError('Could not switch workspace', err);
+    }
   }
 
   function renderTags() {
     els.tagList.textContent = '';
-    const tagButton = (label, tag) =>
-      el('li', {}, [
-        el('button', {
-          type: 'button',
-          class: `side-btn${state.selectedTag === tag ? ' active' : ''}`,
-          'aria-pressed': String(state.selectedTag === tag),
-          text: label,
-          onclick: async () => {
-            state.selectedTag = tag;
-            state.selected.clear();
-            await reloadNotesOnly();
-            renderTags();
-          }
-        })
-      ]);
-    els.tagList.appendChild(tagButton('All notes', null));
     if (!state.tags.length) {
       els.tagList.appendChild(el('li', { class: 'muted-item', text: 'No tags yet' }));
+      return;
     }
-    state.tags.forEach((tag) => els.tagList.appendChild(tagButton(`#${tag}`, tag)));
+    state.tags.forEach((tag) => {
+      const active = state.selectedTag === tag;
+      els.tagList.appendChild(
+        el('li', {}, [
+          el('button', {
+            type: 'button',
+            class: `tag-btn${active ? ' active' : ''}`,
+            'aria-pressed': String(active),
+            text: `#${tag}`,
+            onclick: () => setTag(active ? null : tag)
+          })
+        ])
+      );
+    });
+  }
+
+  async function setTag(tag) {
+    state.selectedTag = tag;
+    state.selected.clear();
+    showView('notes');
+    renderTags();
+    await reloadNotesOnly();
   }
 
   function renderRecent() {
@@ -357,27 +640,92 @@
     state.recent.forEach((note) => {
       els.recentList.appendChild(
         el('li', {}, [
-          el('button', {
-            type: 'button',
-            class: 'side-btn recent',
-            title: note.title || 'Untitled',
-            text: note.title || 'Untitled',
-            onclick: () => run('Could not open the note', () => api.openNote(note.id))
-          })
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'side-btn recent',
+              title: `Open ${note.title || 'Untitled'}`,
+              onclick: () => run('Could not open the note', () => api.openNote(note.id))
+            },
+            [
+              el('span', { class: 'dot', style: `background:${colorOf(note.color).hex}` }),
+              el('span', { class: 'label', text: note.title || 'Untitled' })
+            ]
+          )
         ])
       );
     });
   }
 
-  // ---------- note list ----------
+  function renderTrashCount() {
+    els.trashCount.textContent = state.trash.length ? String(state.trash.length) : '';
+  }
+
+  // ---------- notes view ----------
+
+  function matchesFilters(n) {
+    if (n.workspaceId !== state.activeWorkspaceId) return false;
+    if (state.selectedTag && !n.tags.some((t) => t.toLowerCase() === state.selectedTag)) return false;
+    if (state.query) {
+      const q = state.query.toLowerCase();
+      return (
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q) ||
+        n.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    }
+    return true;
+  }
+
+  function renderHeader() {
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    els.viewTitle.textContent = ws ? ws.name : 'Notes';
+    const inWs = state.allNotes.filter((n) => n.workspaceId === state.activeWorkspaceId);
+    const onScreen = inWs.filter((n) => n.visible).length;
+    els.viewSub.textContent = inWs.length
+      ? `${plural(inWs.length, 'note')} · ${onScreen} on screen`
+      : 'No notes yet';
+    const matching = state.allNotes.filter(matchesFilters);
+    const open = matching.filter((n) => n.visible).length;
+    els.countAll.textContent = String(matching.length);
+    els.countOpen.textContent = String(open);
+    els.countHidden.textContent = String(matching.length - open);
+    for (const btn of document.querySelectorAll('[data-visibility]')) {
+      btn.setAttribute('aria-pressed', String(btn.dataset.visibility === state.visibility));
+    }
+    const chips = [];
+    if (state.selectedTag) {
+      chips.push(filterChip(`Tag #${state.selectedTag}`, 'Remove tag filter', () => setTag(null)));
+    }
+    if (state.query) {
+      chips.push(
+        filterChip(`Search “${state.query}”`, 'Clear search', () => {
+          els.search.value = '';
+          applySearch('');
+        })
+      );
+    }
+    els.filterChips.replaceChildren(...chips);
+    els.filterChips.hidden = !chips.length;
+  }
+
+  function filterChip(text, removeLabel, onRemove) {
+    return el('span', { class: 'filter-chip' }, [
+      text,
+      el('button', { type: 'button', 'aria-label': removeLabel, title: removeLabel, onclick: onRemove }, [icon('close')])
+    ]);
+  }
 
   function updateBulkUi() {
     const n = state.selected.size;
     els.selCount.textContent = n ? `${n} selected` : '';
-    els.btnBulkShow.disabled = n === 0;
-    els.btnBulkHide.disabled = n === 0;
+    els.bulkBar.classList.toggle('has-selection', n > 0);
+    els.noteList.classList.toggle('selecting', n > 0);
+    for (const b of [els.btnBulkShow, els.btnBulkHide, els.btnBulkTrash]) b.disabled = n === 0;
     els.selectAll.checked = state.notes.length > 0 && n === state.notes.length;
     els.selectAll.indeterminate = n > 0 && n < state.notes.length;
+    els.bulkBar.hidden = state.notes.length === 0;
   }
 
   function renderEmptyState() {
@@ -388,82 +736,191 @@
       : 'Create a note or pick a template to get started.';
   }
 
+  function toggleSelected(id, on) {
+    if (on) state.selected.add(id);
+    else state.selected.delete(id);
+    const card = cardEl(id);
+    if (card) {
+      card.classList.toggle('selected', on);
+      const check = card.querySelector('.note-check');
+      if (check) check.checked = on;
+    }
+    updateBulkUi();
+  }
+
+  const cardEls = () => Array.from(els.noteList.querySelectorAll('.note-card'));
+  const cardEl = (id) => els.noteList.querySelector(`.note-card[data-note-id="${CSS.escape(id)}"]`);
+
+  function focusCard(id) {
+    const cards = cardEls();
+    if (!cards.length) return;
+    const target = cardEl(id) || cards[0];
+    state.focusId = target.dataset.noteId;
+    for (const c of cards) c.tabIndex = c === target ? 0 : -1;
+    target.focus();
+  }
+
   function noteCard(note) {
     const title = note.title || 'Untitled';
+    const color = colorOf(note.color);
+    const selected = state.selected.has(note.id);
+    const card = el('article', {
+      class: `note-card${color.ink === 'light' ? ' ink-light' : ''}${selected ? ' selected' : ''}`,
+      role: 'listitem',
+      tabindex: '-1',
+      'data-note-id': note.id,
+      'aria-label': `${title}, ${note.visible ? 'on screen' : 'hidden'}`
+    });
+    card.style.setProperty('--tint', color.hex);
+
     const check = el('input', {
       type: 'checkbox',
       class: 'note-check',
+      tabindex: '-1',
       'aria-label': `Select ${title}`,
-      checked: state.selected.has(note.id)
+      checked: selected
     });
-    const card = el('article', {
-      class: `note-card${state.selected.has(note.id) ? ' selected' : ''}`,
-      role: 'listitem',
-      'data-note-id': note.id
-    });
-    check.addEventListener('change', () => {
-      if (check.checked) state.selected.add(note.id);
-      else state.selected.delete(note.id);
-      card.classList.toggle('selected', check.checked);
-      updateBulkUi();
+    check.addEventListener('change', () => toggleSelected(note.id, check.checked));
+
+    const titleEl = el('h3', { class: 'note-title', text: title, title: 'Double-click to rename' });
+    titleEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      startRename(note.id);
     });
 
-    const meta = el('div', { class: 'note-meta' }, [
-      el('span', {
-        class: `pill ${note.visible ? 'visible' : 'hidden-note'}`,
-        text: note.visible ? 'Open' : 'Hidden'
-      }),
-      el('span', { text: `Edited ${formatRelative(note.updatedAt)}` }),
-      ...(note.clickThrough ? [el('span', { class: 'pill warn', text: 'Click-through on' })] : []),
-      ...(note.tags || []).map((t) => el('span', { class: 'pill', text: `#${t}` }))
-    ]);
+    const more = el(
+      'button',
+      {
+        type: 'button',
+        class: 'icon-btn card-more',
+        title: 'More actions',
+        'aria-label': `More actions for ${title}`,
+        'aria-haspopup': 'menu',
+        'aria-expanded': 'false'
+      },
+      [icon('more')]
+    );
+    more.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (anchorJustClosed(more)) return;
+      openNoteMenu(note, { anchor: more });
+    });
 
-    const action = (label, handler, extra = {}) =>
-      el('button', { type: 'button', class: 'link-btn', text: label, onclick: handler, ...extra });
+    const body = el('div', { class: 'card-body', 'aria-hidden': 'true' });
+    const text = bodyText(note);
+    if (text.trim()) body.innerHTML = md.renderMarkdown(text.slice(0, 1500));
+    else body.appendChild(el('p', { class: 'card-empty', text: 'Empty note' }));
 
-    const actions = el('div', { class: 'note-actions' }, [
-      action(note.visible ? 'Focus' : 'Open', () =>
-        run('Could not open the note', () => api.openNote(note.id))
-      ),
-      action('Hide', () => run('Could not hide the note', () => api.hideNote(note.id)), {
-        disabled: !note.visible
-      }),
-      ...(note.clickThrough
-        ? [
-            action('Turn off click-through', () =>
-              run('Could not change click-through', () =>
-                api.updateNote(note.id, { clickThrough: false })
-              )
-            )
-          ]
-        : []),
-      action('Rename', () => promptRenameNote(note)),
-      action('Tags', () => promptTags(note)),
-      action('Duplicate', () => run('Could not duplicate the note', () => api.duplicateNote(note.id))),
-      ...(state.workspaces.length > 1 ? [action('Move', () => promptMoveNote(note))] : []),
-      action('Export .md', () => exportMarkdown(note)),
-      el('span', { class: 'actions-spacer' }),
-      action('Delete', () => confirmDeleteNote(note), { class: 'link-btn danger' })
-    ]);
+    const pills = [el('span', { class: `pill ${note.visible ? 'visible' : 'hidden-note'}`, text: note.visible ? 'On screen' : 'Hidden' })];
+    if (note.clickThrough) {
+      pills.push(
+        el('button', {
+          type: 'button',
+          class: 'pill warn',
+          text: 'Click-through',
+          title: 'Click-through is on: clicks pass through this note. Click to turn it off.',
+          'aria-label': `Turn off click-through for ${title}`,
+          onclick: (e) => {
+            e.stopPropagation();
+            setClickThrough(note, false);
+          }
+        })
+      );
+    }
+
+    const openBtn = el('button', {
+      type: 'button',
+      class: 'open-btn',
+      text: note.visible ? 'Hide' : 'Open',
+      title: note.visible ? 'Hide this note from the screen' : 'Show this note on screen'
+    });
+    openBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (note.visible) hideNote(note);
+      else openNote(note);
+    });
 
     card.append(
-      check,
-      el('div', { class: 'swatch', style: `background:${colorHex(note.color)}` }),
-      el('div', { class: 'note-body' }, [
-        el('h3', { class: 'note-title', text: title }),
-        el('p', { class: 'note-preview', text: snippet(note) || 'Empty note' }),
-        meta,
-        actions
+      el('header', { class: 'card-head' }, [check, el('span', { class: 'color-dot', 'aria-hidden': 'true' }), titleEl, more]),
+      body,
+      el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
+      el('footer', { class: 'card-foot' }, [
+        el('div', { class: 'card-pills' }, pills),
+        el('div', { class: 'card-tags' }, (note.tags || []).slice(0, 4).map((t) => el('span', { class: 'chip', text: `#${t}` }))),
+        el('span', { class: 'when', text: formatRelative(note.updatedAt), title: `Edited ${new Date(note.updatedAt).toLocaleString()}` }),
+        openBtn
       ])
     );
+
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('button, input')) return;
+      if (e.shiftKey || e.metaKey || e.ctrlKey) toggleSelected(note.id, !state.selected.has(note.id));
+      focusCard(note.id);
+    });
+    card.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button, input, .note-title')) return;
+      openNote(note);
+    });
+    card.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      focusCard(note.id);
+      openNoteMenu(note, { point: { x: e.clientX, y: e.clientY } });
+    });
     return card;
   }
 
   function renderNotes() {
-    els.noteList.replaceChildren(...state.notes.map(noteCard));
+    if (state.renamingId || !els.menu.classList.contains('hidden')) {
+      state.pendingRender = true;
+      return;
+    }
+    state.pendingRender = false;
+    const signature = JSON.stringify([state.layout, state.notes, [...state.selected], state.bootstrap.colors.length]);
+    const hadFocus = els.noteList.contains(document.activeElement);
+    if (signature !== state.renderedSignature) {
+      state.renderedSignature = signature;
+      els.noteList.classList.toggle('board', state.layout === 'board');
+      els.noteList.classList.toggle('list', state.layout === 'list');
+      els.noteList.replaceChildren(...state.notes.map(noteCard));
+      const cards = cardEls();
+      const keep = cards.find((c) => c.dataset.noteId === state.focusId) || cards[0];
+      if (keep) keep.tabIndex = 0;
+      if (hadFocus && keep) keep.focus();
+    }
+    els.noteList.hidden = state.notes.length === 0;
     els.empty.classList.toggle('hidden', state.notes.length > 0);
     if (!state.notes.length) renderEmptyState();
+    renderHeader();
     updateBulkUi();
+  }
+
+  function setLayout(layout) {
+    if (layout === state.layout) return;
+    state.layout = layout;
+    els.btnBoard.setAttribute('aria-pressed', String(layout === 'board'));
+    els.btnList.setAttribute('aria-pressed', String(layout === 'list'));
+    renderNotes();
+    api.updateSettings({ managerView: layout }).catch(() => {});
+  }
+
+  // ---------- note actions ----------
+
+  function openNote(note) {
+    return run('Could not open the note', () => api.openNote(note.id));
+  }
+
+  function hideNote(note) {
+    return run('Could not hide the note', () => api.hideNote(note.id));
+  }
+
+  function setClickThrough(note, on) {
+    return run('Could not change click-through', () => updateNoteOrThrow(note.id, { clickThrough: on }));
+  }
+
+  async function updateNoteOrThrow(id, patch) {
+    const result = await api.updateNote(id, patch);
+    if (!result || result.__saveError) throw new Error((result && result.__saveError) || 'This note no longer exists.');
+    return result;
   }
 
   async function exportMarkdown(note) {
@@ -475,28 +932,125 @@
     }
   }
 
-  // ---------- prompts ----------
+  async function duplicateNote(note) {
+    const copy = await run('Could not duplicate the note', () => api.duplicateNote(note.id));
+    if (copy) state.focusId = copy.id;
+  }
 
-  function promptRenameNote(note) {
-    const input = el('input', { id: 'mTitle', maxlength: '200' });
-    input.value = note.title || '';
-    openModal({
-      title: 'Rename note',
-      body: field('Title', input),
-      footerButtons: [
-        { label: 'Cancel', onClick: closeModal },
-        {
-          label: 'Save',
-          primary: true,
-          onClick: async () => {
-            await updateNoteOrThrow(note.id, { title: input.value.trim() || 'Untitled' });
-            closeModal();
-            await reload();
-          }
-        }
-      ]
+  /** Move notes to the trash, with Undo in the toast. */
+  async function trashNotes(notes) {
+    const done = [];
+    const cards = cardEls();
+    const lastIndex = Math.max(...notes.map((n) => cards.findIndex((c) => c.dataset.noteId === n.id)));
+    const after = cards.slice(lastIndex + 1).find((c) => !notes.some((n) => n.id === c.dataset.noteId));
+    try {
+      for (const note of notes) {
+        await api.trashNote(note.id);
+        done.push(note);
+        state.selected.delete(note.id);
+      }
+    } catch (err) {
+      showActionError('Could not move the note to the trash', err);
+    }
+    if (after) state.focusId = after.dataset.noteId;
+    if (done.length) {
+      const message =
+        done.length === 1
+          ? `“${done[0].title || 'Untitled'}” moved to the trash`
+          : `${plural(done.length, 'note')} moved to the trash`;
+      showToast(message, { label: 'Undo', onClick: () => restoreNotes(done) });
+    }
+    await reload();
+  }
+
+  /** Bring notes back from the trash and reopen the ones that were on screen. */
+  async function restoreNotes(notes) {
+    await run('Could not restore the note', async () => {
+      for (const note of notes) {
+        await api.restoreNote(note.id);
+        if (note.visible) await api.openNote(note.id);
+      }
     });
+  }
+
+  function openNoteMenu(note, where) {
+    const colors = (state.bootstrap && state.bootstrap.colors) || [];
+    const items = [
+      note.visible
+        ? { label: 'Bring to front', icon: 'eye', hint: 'Enter', onSelect: () => openNote(note) }
+        : { label: 'Show on screen', icon: 'eye', hint: 'Enter', onSelect: () => openNote(note) }
+    ];
+    if (note.visible) items.push({ label: 'Hide', icon: 'eye-off', onSelect: () => hideNote(note) });
+    items.push(
+      'sep',
+      { label: 'Rename', icon: 'pencil', hint: 'F2', onSelect: () => startRename(note.id) },
+      { label: 'Edit tags…', icon: 'tag', onSelect: () => promptTags(note) },
+      {
+        swatches: colors,
+        current: note.color,
+        label: 'Color',
+        onPick: (color) => run('Could not change the color', () => updateNoteOrThrow(note.id, { color }))
+      },
+      'sep'
+    );
+    if (state.workspaces.length > 1) {
+      items.push({ label: 'Move to workspace…', icon: 'move', onSelect: () => promptMoveNote(note) });
+    }
+    items.push(
+      { label: 'Duplicate', icon: 'copy', onSelect: () => duplicateNote(note) },
+      { label: 'Export as Markdown…', icon: 'export', onSelect: () => exportMarkdown(note) }
+    );
+    if (note.clickThrough) {
+      items.push({ label: 'Turn off click-through', icon: 'ghost', onSelect: () => setClickThrough(note, false) });
+    }
+    items.push('sep', {
+      label: 'Move to trash',
+      icon: 'trash',
+      hint: 'Del',
+      danger: true,
+      onSelect: () => trashNotes([note])
+    });
+    openMenu(items, { ...where, label: `Actions for ${note.title || 'Untitled'}` });
+  }
+
+  function startRename(noteId) {
+    const card = cardEl(noteId);
+    const note = noteById(noteId);
+    if (!card || !note) return;
+    const titleEl = card.querySelector('.note-title');
+    const input = el('input', { class: 'title-edit', maxlength: '200', 'aria-label': 'Note title' });
+    input.value = note.title || '';
+    state.renamingId = noteId;
+    titleEl.replaceWith(input);
+    input.focus();
     input.select();
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      const value = input.value.trim() || 'Untitled';
+      try {
+        if (save && value !== note.title) await updateNoteOrThrow(noteId, { title: value });
+      } catch (err) {
+        showActionError('Could not rename the note', err);
+      }
+      state.renamingId = null;
+      state.renderedSignature = '';
+      await reload();
+      focusCard(noteId);
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        finish(false);
+      }
+    });
+    input.addEventListener('blur', () => finish(true));
+    for (const type of ['click', 'dblclick', 'mousedown']) input.addEventListener(type, (e) => e.stopPropagation());
   }
 
   function promptTags(note) {
@@ -521,6 +1075,9 @@
           }
         }
       ]
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') els.modalFooter.querySelector('.primary-btn').click();
     });
   }
 
@@ -552,36 +1109,6 @@
     });
   }
 
-  async function updateNoteOrThrow(id, patch) {
-    const result = await api.updateNote(id, patch);
-    if (!result || result.__saveError) throw new Error((result && result.__saveError) || 'This note no longer exists.');
-    return result;
-  }
-
-  function confirmDeleteNote(note) {
-    openModal({
-      title: 'Delete note permanently?',
-      body: el('p', {}, [
-        'Delete ',
-        el('strong', { text: note.title || 'Untitled' }),
-        ' for good? Hiding a note keeps it; deleting cannot be undone.'
-      ]),
-      footerButtons: [
-        { label: 'Cancel', onClick: closeModal },
-        {
-          label: 'Delete note',
-          danger: true,
-          onClick: async () => {
-            await api.deleteNote(note.id);
-            state.selected.delete(note.id);
-            closeModal();
-            await reload();
-          }
-        }
-      ]
-    });
-  }
-
   function promptRenameWorkspace(ws) {
     const input = el('input', { id: 'mWs', maxlength: '80' });
     input.value = ws.name;
@@ -603,28 +1130,35 @@
       ]
     });
     input.select();
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') els.modalFooter.querySelector('.primary-btn').click();
+    });
   }
 
-  async function confirmDeleteWorkspace(ws) {
-    const count = (await api.listNotes({ workspaceId: ws.id })).length;
+  function confirmDeleteWorkspace(ws) {
+    const count = state.allNotes.filter((n) => n.workspaceId === ws.id).length;
     openModal({
       title: 'Delete workspace?',
       body: el('p', {}, [
         'Delete ',
         el('strong', { text: ws.name }),
         count
-          ? ` and its ${count} note${count === 1 ? '' : 's'}? This cannot be undone. Export first if you might need them.`
+          ? `? Its ${plural(count, 'note')} ${count === 1 ? 'moves' : 'move'} to the trash, where you can restore ${count === 1 ? 'it' : 'them'} for ${TRASH_DAYS} days.`
           : '? It has no notes.'
       ]),
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
         {
-          label: count ? `Delete workspace and ${count} note${count === 1 ? '' : 's'}` : 'Delete workspace',
+          label: 'Delete workspace',
           danger: true,
           onClick: async () => {
             await api.deleteWorkspace(ws.id);
             closeModal();
             await reload();
+            showToast(
+              count ? `Workspace “${ws.name}” deleted. ${plural(count, 'note')} moved to the trash.` : `Workspace “${ws.name}” deleted.`,
+              count ? { label: 'View trash', onClick: () => showView('trash') } : null
+            );
           }
         }
       ]
@@ -635,7 +1169,7 @@
     const input = el('input', { id: 'mWsNew', placeholder: 'e.g. Work', maxlength: '80' });
     openModal({
       title: 'New workspace',
-      body: field('Name', input),
+      body: field('Name', input, 'Workspaces keep sets of notes apart, for example per client or project.'),
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
         {
@@ -644,6 +1178,108 @@
           onClick: async () => {
             const ws = await api.createWorkspace(input.value.trim() || 'New workspace');
             await api.setActiveWorkspace(ws.id);
+            closeModal();
+            showView('notes');
+            await reload();
+          }
+        }
+      ]
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') els.modalFooter.querySelector('.primary-btn').click();
+    });
+  }
+
+  function createNote(templateId) {
+    return run('Could not create a note', () =>
+      api.createNote({ templateId: templateId || 'blank', workspaceId: state.activeWorkspaceId })
+    );
+  }
+
+  // ---------- trash ----------
+
+  function renderTrash() {
+    const list = [...state.trash].sort((a, b) => Date.parse(b.trashedAt) - Date.parse(a.trashedAt));
+    els.trashList.replaceChildren(
+      ...list.map((note) => {
+        const title = note.title || 'Untitled';
+        const age = Math.floor((Date.now() - Date.parse(note.trashedAt)) / 86400000);
+        const left = Math.max(1, TRASH_DAYS - age);
+        const row = el('article', { class: 'note-card', role: 'listitem', 'data-note-id': note.id }, [
+          el('span', { class: 'color-dot', 'aria-hidden': 'true' }),
+          el('h3', { class: 'note-title', text: title }),
+          el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
+          el('span', {
+            class: 'trash-left',
+            text: `Deleted ${formatRelative(note.trashedAt)} · ${plural(left, 'day')} left`
+          }),
+          el('div', { class: 'trash-actions' }, [
+            el('button', {
+              type: 'button',
+              class: 'ghost-btn',
+              text: 'Restore',
+              'aria-label': `Restore ${title}`,
+              onclick: () => restoreFromTrash(note)
+            }),
+            el('button', {
+              type: 'button',
+              class: 'ghost-btn danger',
+              text: 'Delete forever',
+              'aria-label': `Delete ${title} forever`,
+              onclick: () => confirmDeleteForever(note)
+            })
+          ])
+        ]);
+        row.style.setProperty('--tint', colorOf(note.color).hex);
+        return row;
+      })
+    );
+    els.trashList.hidden = list.length === 0;
+    els.trashEmpty.classList.toggle('hidden', list.length > 0);
+    els.btnEmptyTrash.disabled = list.length === 0;
+  }
+
+  async function restoreFromTrash(note) {
+    const restored = await run('Could not restore the note', () => api.restoreNote(note.id));
+    if (!restored) return;
+    const ws = state.workspaces.find((w) => w.id === restored.workspaceId);
+    showToast(`Restored “${note.title || 'Untitled'}”${ws ? ` to ${ws.name}` : ''}`, {
+      label: 'Show it',
+      onClick: () => openNote(restored)
+    });
+  }
+
+  function confirmDeleteForever(note) {
+    openModal({
+      title: 'Delete forever?',
+      body: el('p', {}, ['Delete ', el('strong', { text: note.title || 'Untitled' }), ' for good? This cannot be undone.']),
+      footerButtons: [
+        { label: 'Cancel', onClick: closeModal },
+        {
+          label: 'Delete forever',
+          danger: true,
+          onClick: async () => {
+            await api.deleteNote(note.id);
+            closeModal();
+            await reload();
+          }
+        }
+      ]
+    });
+  }
+
+  function confirmEmptyTrash() {
+    const n = state.trash.length;
+    openModal({
+      title: 'Empty the trash?',
+      body: el('p', { text: `${plural(n, 'note')} will be deleted for good. This cannot be undone.` }),
+      footerButtons: [
+        { label: 'Cancel', onClick: closeModal },
+        {
+          label: 'Empty trash',
+          danger: true,
+          onClick: async () => {
+            await api.emptyTrash();
             closeModal();
             await reload();
           }
@@ -656,6 +1292,7 @@
 
   const STATUS_TEXT = {
     active: 'Works everywhere',
+    app: 'Only in Ghost Notetaker',
     local: 'In notes only',
     unavailable: 'Taken by another app or the OS',
     duplicate: 'Duplicate',
@@ -710,7 +1347,7 @@
     }
   }
 
-  async function showShortcuts() {
+  function shortcutsSection() {
     const table = el('table', { class: 'shortcut-table' });
     const message = el('p', { class: 'field-hint', role: 'status' });
 
@@ -723,11 +1360,30 @@
           const keyCell = recording
             ? el('span', { class: 'kbd recording', text: 'Press the new shortcut… (Esc cancels)' })
             : el('span', { class: 'kbd', text: s.display || '—' });
-          const statusClass =
-            s.status === 'active' || s.status === 'local' ? 'ok' : s.status === 'off' ? '' : 'bad';
+          const statusClass = ['active', 'local', 'app'].includes(s.status) ? 'ok' : s.status === 'off' ? '' : 'bad';
+          let scopeCell;
+          if (s.canBeGlobal) {
+            const select = el('select', { class: 'scope-select', 'aria-label': `Where ${s.label} works` }, [
+              el('option', { value: 'global', text: 'Everywhere' }),
+              el('option', { value: 'app', text: 'In Ghost Notetaker' })
+            ]);
+            select.value = s.effectiveScope === 'app' ? 'app' : 'global';
+            select.addEventListener('change', async () => {
+              try {
+                render(null, await api.setShortcutScope(s.id, select.value));
+                flashSaved();
+              } catch (err) {
+                render(errorMessage(err));
+              }
+            });
+            scopeCell = select;
+          } else {
+            scopeCell = el('span', { class: 'field-hint', text: 'In a focused note' });
+          }
           return el('tr', {}, [
             el('td', { text: s.label }),
             el('td', {}, [keyCell]),
+            el('td', {}, [scopeCell]),
             el('td', { class: `status ${statusClass}`, text: STATUS_TEXT[s.status] || s.status }),
             el('td', { class: 'row-actions' }, [
               el('button', {
@@ -761,9 +1417,7 @@
           ]);
         });
         table.replaceChildren(
-          el('thead', {}, [
-            el('tr', {}, ['Action', 'Shortcut', 'Status', ''].map((h) => el('th', { text: h })))
-          ]),
+          el('thead', {}, [el('tr', {}, ['Action', 'Shortcut', 'Works', 'Status', ''].map((h) => el('th', { text: h })))]),
           el('tbody', {}, rows)
         );
       };
@@ -771,140 +1425,416 @@
       else api.listShortcuts().then(draw);
     }
 
-    openModal({
-      title: 'Keyboard shortcuts',
-      wide: true,
-      body: [
+    render();
+    return settingsCard('setShortcuts', 'keyboard', 'Keyboard shortcuts', null, [
+      el('div', { class: 'set-block' }, [
         table,
         message,
         el('p', {
           class: 'field-hint',
-          text: 'Global shortcuts work while other apps are focused. A shortcut that another app or the OS already uses cannot be registered; pick a different one.'
-        })
-      ],
-      footerButtons: [
-        {
-          label: 'Reset to defaults',
-          onClick: async () => render(null, await api.resetShortcuts())
-        },
-        { label: 'Done', primary: true, onClick: closeModal }
-      ]
-    });
-    render();
+          text: '“Everywhere” shortcuts work while other apps are focused. A shortcut that another app or the OS already uses cannot be registered; pick a different one, or limit it to Ghost Notetaker windows.'
+        }),
+        el('div', { class: 'button-row', style: 'margin-top:12px' }, [
+          el('button', {
+            type: 'button',
+            id: 'btnResetShortcuts',
+            class: 'ghost-btn',
+            text: 'Reset to defaults',
+            onclick: async () => {
+              try {
+                render(null, await api.resetShortcuts());
+                flashSaved();
+              } catch (err) {
+                render(errorMessage(err));
+              }
+            }
+          })
+        ])
+      ])
+    ]);
   }
 
-  // ---------- preferences ----------
+  // ---------- settings ----------
 
-  async function showSettings() {
-    const boot = await api.getBootstrap();
-    state.bootstrap = boot;
-    const s = boot.settings;
+  function flashSaved() {
+    els.settingsSaved.hidden = false;
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => {
+      els.settingsSaved.hidden = true;
+    }, 1800);
+  }
+
+  async function saveSettings(patch) {
+    try {
+      const s = await api.updateSettings(patch);
+      state.bootstrap.settings = s;
+      flashSaved();
+      return s;
+    } catch (err) {
+      showActionError('Could not save the setting', err);
+      syncSettings();
+      return null;
+    }
+  }
+
+  function settingsCard(id, iconName, title, aside, children) {
+    return el('section', { class: 'set-card', id, 'aria-labelledby': `${id}H` }, [
+      el('div', { class: 'set-card-head' }, [
+        icon(iconName),
+        el('h2', { id: `${id}H`, text: title }),
+        ...(aside ? [el('p', { text: aside })] : [])
+      ]),
+      ...children
+    ]);
+  }
+
+  function setRow({ label, hint, control, forId, disabled }) {
+    return el('div', { class: `set-row${disabled ? ' disabled' : ''}` }, [
+      el('div', { class: 'set-label' }, [
+        forId ? el('label', { for: forId, text: label }) : el('strong', { text: label }),
+        ...(hint ? [el('p', { class: 'field-hint', text: hint })] : [])
+      ]),
+      el('div', { class: 'set-control' }, [control])
+    ]);
+  }
+
+  function switchControl(id, onChange) {
+    const input = el('input', { type: 'checkbox', id, role: 'switch' });
+    input.addEventListener('change', () => onChange(input.checked));
+    return el('span', { class: 'switch' }, [input, el('span', { class: 'track', 'aria-hidden': 'true' })]);
+  }
+
+  function themeOption(value, label, iconName) {
+    return el(
+      'button',
+      {
+        type: 'button',
+        class: 'theme-option',
+        role: 'radio',
+        'aria-checked': 'false',
+        'data-theme': value,
+        onclick: async () => {
+          markTheme(value);
+          if (await saveSettings({ theme: value })) await reload();
+        }
+      },
+      [
+        el('div', { class: `theme-preview tp-${value}`, 'aria-hidden': 'true' }, [
+          el('i', { class: 'tp-side' }),
+          el('i', { class: 'tp-main' }, [
+            el('i', { class: 'tp-card', style: 'background:#ffe58a' }),
+            el('i', { class: 'tp-card', style: 'background:#a7f3d0' }),
+            el('i', { class: 'tp-card', style: 'background:#c7b8ff' }),
+            el('i', { class: 'tp-card', style: 'background:#3b3f8f' })
+          ])
+        ]),
+        el('span', {}, [icon(iconName), label])
+      ]
+    );
+  }
+
+  function markTheme(value) {
+    for (const b of els.settingsBody.querySelectorAll('.theme-option')) {
+      b.setAttribute('aria-checked', String(b.dataset.theme === value));
+    }
+  }
+
+  function renderSettings() {
+    const boot = state.bootstrap;
     const caps = boot.capabilities;
     const linuxOnly = 'Not available on Linux.';
+    const colors = boot.colors || [];
 
-    const color = el(
-      'select',
-      { id: 'sColor' },
-      (boot.colors || []).map((c) => {
-        const opt = el('option', { value: c.id, text: c.label });
-        opt.selected = s.defaultColor === c.id;
-        return opt;
-      })
+    const swatches = el(
+      'div',
+      { class: 'swatches', id: 'sColor', role: 'radiogroup', 'aria-label': 'Color for new notes' },
+      colors.map((c) =>
+        el('button', {
+          type: 'button',
+          class: 'swatch-btn',
+          role: 'radio',
+          'aria-checked': 'false',
+          'aria-label': c.label,
+          title: c.label,
+          'data-color': c.id,
+          style: `background:${c.hex}`,
+          onclick: () => {
+            markSwatch(c.id);
+            saveSettings({ defaultColor: c.id });
+          }
+        })
+      )
     );
-    const opacityPct = Math.round((s.defaultOpacity || 0.88) * 100);
-    const opacity = el('input', { id: 'sOpacity', type: 'range', min: '25', max: '100', value: String(opacityPct) });
-    const opacityOut = el('output', { for: 'sOpacity', text: `${opacityPct}%` });
+
+    const opacity = el('input', { id: 'sOpacity', type: 'range', min: '25', max: '100' });
+    const opacityOut = el('output', { for: 'sOpacity', id: 'sOpacityOut' });
     opacity.addEventListener('input', () => {
       opacityOut.textContent = `${opacity.value}%`;
     });
-    const font = el('input', { id: 'sFont', type: 'number', min: '10', max: '28', value: String(s.defaultFontSize || 14) });
-    const sort = el(
-      'select',
-      { id: 'sSort' },
-      [
-        ['updated', 'Last edited'],
-        ['created', 'Created'],
-        ['title', 'Title'],
-        ['color', 'Color']
-      ].map(([value, label]) => {
-        const opt = el('option', { value, text: label });
-        opt.selected = s.sortBy === value;
-        return opt;
-      })
-    );
-    const check = (id, label, checked, enabled, hint) =>
-      el('div', { class: `check-row${enabled ? '' : ' disabled'}` }, [
-        el('input', { type: 'checkbox', id, checked: checked && enabled, disabled: !enabled }),
-        el('label', { for: id }, [label, ...(hint ? [el('span', { class: 'field-hint', text: hint })] : [])])
-      ]);
+    opacity.addEventListener('change', () => saveSettings({ defaultOpacity: Number(opacity.value) / 100 }));
 
-    const body = [
-      el('h3', { class: 'settings-heading', text: 'New notes' }),
-      el('div', { class: 'settings-grid' }, [
-        field('Color', color),
-        el('div', { class: 'field' }, [
-          el('label', { for: 'sOpacity', text: 'Opacity' }),
-          el('div', { class: 'range-row' }, [opacity, opacityOut])
-        ]),
-        field('Text size (px)', font),
-        field('Sort notes by', sort)
-      ]),
-      check('sMono', 'Use a monospace font', s.defaultMonospace, true),
-      el('h3', { class: 'settings-heading', text: 'Behavior' }),
-      check(
-        'sProtect',
-        'Hide notes and this window from screen capture',
-        s.contentProtection !== false,
-        caps.contentProtection,
-        caps.contentProtection
-          ? isMac()
-            ? 'Best effort: apps that capture with ScreenCaptureKit can still record these windows.'
-            : 'Uses the Windows capture-exclusion flag (Windows 10 2004 or later).'
-          : linuxOnly
-      ),
-      check('sClick', 'Click-through for all notes (ghost mode)', s.globalClickThrough, true),
-      check('sLogin', 'Launch at login', s.launchAtLogin, caps.launchAtLogin, caps.launchAtLogin ? '' : linuxOnly),
-      el('h3', { class: 'settings-heading', text: 'Data' }),
-      el('p', { class: 'data-path' }, [
-        'Notes are saved on this computer in ',
-        el('code', { text: boot.dataFile }),
-        ' '
-      ]),
-      el('button', {
-        type: 'button',
-        class: 'link-btn',
-        text: 'Show notes file',
-        onclick: () => api.revealDataFile()
-      }),
-      el('p', { class: 'field-hint', text: `Ghost Notetaker ${boot.version}` })
+    const font = el('input', { id: 'sFont', class: 'number-input', type: 'number', min: '10', max: '28' });
+    font.addEventListener('change', () => {
+      const size = Math.min(28, Math.max(10, Math.round(Number(font.value) || 14)));
+      font.value = String(size);
+      saveSettings({ defaultFontSize: size });
+    });
+
+    const protectHint = caps.contentProtection
+      ? isMac()
+        ? 'Best effort: apps that capture with ScreenCaptureKit can still record these windows.'
+        : 'Uses the Windows capture-exclusion flag (Windows 10 2004 or later). Test your own call or recording app.'
+      : `${linuxOnly} Notes appear in screenshots, recordings, and screen shares.`;
+
+    const capability = (ok, text) =>
+      el('li', {}, [el('span', { class: `mark ${ok ? 'yes' : 'no'}`, text: ok ? '✓' : '!' }), el('span', { text })]);
+
+    const keys = [
+      ['/', 'Search notes'],
+      [`${modLabel()}N`, 'New note'],
+      ['← → ↑ ↓', 'Move between notes'],
+      ['Enter', 'Show the note on screen'],
+      ['Space', 'Select or unselect'],
+      ['F2', 'Rename'],
+      ['Delete', 'Move to the trash (Undo in the message that appears)'],
+      ['Esc', 'Clear the search or selection; leave Settings and Trash']
     ];
 
+    els.settingsBody.replaceChildren(
+      settingsCard('setAppearance', 'palette', 'Appearance', null, [
+        el('div', { class: 'set-row' }, [
+          el('div', { class: 'set-label' }, [
+            el('strong', { text: 'Notes Manager theme' }),
+            el('p', { class: 'field-hint', text: 'System follows your computer’s light or dark setting. Notes keep their own colors.' })
+          ])
+        ]),
+        el('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Theme' }, [
+          themeOption('system', 'System', 'monitor'),
+          themeOption('light', 'Light', 'sun'),
+          themeOption('dark', 'Dark', 'moon')
+        ])
+      ]),
+      settingsCard('setNotes', 'notes', 'New notes', 'Applies to notes you create from now on', [
+        setRow({ label: 'Color', control: swatches }),
+        setRow({ label: 'Opacity', forId: 'sOpacity', control: el('div', { class: 'range-row' }, [opacity, opacityOut]) }),
+        setRow({ label: 'Text size (px)', forId: 'sFont', control: font }),
+        setRow({ label: 'Use a monospace font', forId: 'sMono', control: switchControl('sMono', (v) => saveSettings({ defaultMonospace: v })) }),
+        setRow({
+          label: 'Show formatted Markdown when not editing',
+          forId: 'sFormatted',
+          hint: 'Notes show headings, lists, tables, and images until you click into the text. Turn off to always show the Markdown source.',
+          control: switchControl('sFormatted', (v) => saveSettings({ formattedWhenIdle: v }))
+        })
+      ]),
+      settingsCard('setPrivacy', 'shield', 'Privacy and behavior', null, [
+        setRow({
+          label: 'Hide notes and this window from screen capture',
+          forId: 'sProtect',
+          hint: protectHint,
+          disabled: !caps.contentProtection,
+          control: switchControl('sProtect', (v) => saveSettings({ contentProtection: v }))
+        }),
+        setRow({
+          label: 'Click-through for all notes (ghost mode)',
+          forId: 'sClick',
+          hint: caps.clickThroughHover
+            ? 'Clicks pass through every note. Hover a note’s top bar to use its buttons.'
+            : 'Clicks pass through every note. On Linux, turn it off here or from the tray menu.',
+          control: switchControl('sClick', (v) => saveSettings({ globalClickThrough: v }))
+        }),
+        setRow({
+          label: 'Launch at login',
+          forId: 'sLogin',
+          hint: caps.launchAtLogin ? '' : linuxOnly,
+          disabled: !caps.launchAtLogin,
+          control: switchControl('sLogin', (v) => saveSettings({ launchAtLogin: v }))
+        })
+      ]),
+      shortcutsSection(),
+      backupsSection(),
+      settingsCard('setData', 'database', 'Data', null, [
+        el('div', { class: 'set-block' }, [
+          el('p', { class: 'data-path' }, ['Notes are saved on this computer in ', el('code', { text: boot.dataFile }), '.']),
+          el('p', {
+            class: 'field-hint',
+            text: 'Ghost Notetaker makes no network requests of its own. Exports include pasted images, so one file holds a whole notebook.'
+          }),
+          el('div', { class: 'button-row', style: 'margin-top:12px' }, [
+            el('button', { type: 'button', id: 'btnExport', class: 'ghost-btn', onclick: exportAll }, [icon('download'), 'Export all notes…']),
+            el('button', { type: 'button', id: 'btnImport', class: 'ghost-btn', onclick: promptImport }, [icon('upload'), 'Import backup…']),
+            el('button', { type: 'button', id: 'btnRevealData', class: 'ghost-btn', onclick: () => api.revealDataFile() }, [icon('folder'), 'Show notes file'])
+          ])
+        ])
+      ]),
+      settingsCard('setAbout', 'info', 'About', `Ghost Notetaker ${boot.version}`, [
+        el('div', { class: 'set-block' }, [
+          el('ul', { class: 'caps-list' }, [
+            capability(caps.contentProtection, caps.contentProtection ? 'Notes can be hidden from screen capture (best effort; test your own apps).' : `Screen-capture hiding: ${linuxOnly}`),
+            capability(caps.clickThroughHover, caps.clickThroughHover ? 'Click-through notes still respond when you hover the top bar.' : 'Click-through notes ignore the mouse until you turn click-through off.'),
+            capability(caps.launchAtLogin, caps.launchAtLogin ? 'Can start when you log in.' : `Launch at login: ${linuxOnly}`)
+          ]),
+          el('h3', { class: 'field-hint', style: 'margin:14px 0 8px;font-weight:700', text: 'Notes Manager keys' }),
+          el('div', { class: 'keys-grid' }, keys.flatMap(([k, d]) => [el('kbd', { text: k }), el('span', { text: d })]))
+        ])
+      ])
+    );
+    syncSettings();
+    loadBackups();
+  }
+
+  function markSwatch(id) {
+    for (const b of els.settingsBody.querySelectorAll('#sColor .swatch-btn')) {
+      b.setAttribute('aria-checked', String(b.dataset.color === id));
+    }
+  }
+
+  /** Copy saved settings into the controls without rebuilding the page. */
+  function syncSettings() {
+    if (!els.settingsBody.firstChild) return;
+    const s = state.bootstrap.settings;
+    const caps = state.bootstrap.capabilities;
+    markTheme(s.theme || 'system');
+    markSwatch(s.defaultColor);
+    const opacity = $('sOpacity');
+    if (opacity && document.activeElement !== opacity) {
+      opacity.value = String(Math.round((s.defaultOpacity || 0.88) * 100));
+      $('sOpacityOut').textContent = `${opacity.value}%`;
+    }
+    const font = $('sFont');
+    if (font && document.activeElement !== font) font.value = String(s.defaultFontSize || 14);
+    const setCheck = (id, value, enabled = true) => {
+      const box = $(id);
+      if (!box) return;
+      box.disabled = !enabled;
+      box.checked = Boolean(value) && enabled;
+    };
+    setCheck('sMono', s.defaultMonospace);
+    setCheck('sFormatted', s.formattedWhenIdle !== false);
+    setCheck('sProtect', s.contentProtection !== false, caps.contentProtection);
+    setCheck('sClick', s.globalClickThrough);
+    setCheck('sLogin', s.launchAtLogin, caps.launchAtLogin);
+  }
+
+  function updateSettingsNav() {
+    const sections = Array.from(els.settingsBody.querySelectorAll('.set-card'));
+    const y = els.settingsScroller.scrollTop + 40;
+    let current = sections[0];
+    for (const s of sections) if (s.offsetTop <= y) current = s;
+    const atEnd = els.settingsScroller.scrollTop + els.settingsScroller.clientHeight >= els.settingsScroller.scrollHeight - 4;
+    if (atEnd && sections.length) current = sections[sections.length - 1];
+    for (const a of document.querySelectorAll('.settings-nav a')) {
+      a.classList.toggle('current', Boolean(current) && a.getAttribute('href') === `#${current.id}`);
+    }
+    if (state.view === 'settings' && current) {
+      els.btnShortcuts.classList.toggle('active', current.id === 'setShortcuts');
+      els.btnSettings.classList.toggle('active', current.id !== 'setShortcuts');
+    }
+  }
+
+  els.settingsScroller.addEventListener('scroll', updateSettingsNav, { passive: true });
+  for (const a of document.querySelectorAll('.settings-nav a')) {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = $(a.getAttribute('href').slice(1));
+      if (target) els.settingsScroller.scrollTo({ top: target.offsetTop - 12, behavior: 'smooth' });
+    });
+  }
+
+  // ---------- backups ----------
+
+  const backupList = el('ul', { class: 'backup-list', id: 'backupList' });
+
+  function backupsSection() {
+    return settingsCard('setBackups', 'history', 'Backups', null, [
+      el('div', { class: 'set-block' }, [
+        el('p', {
+          class: 'field-hint',
+          text: 'Once a day Ghost Notetaker copies your notes file into the backups folder and keeps the 10 newest copies. Restoring replaces every note and workspace; a copy of your current notes is made first, so a restore can be undone.'
+        }),
+        el('div', { class: 'button-row', style: 'margin-top:12px' }, [
+          el('button', { type: 'button', id: 'btnBackupNow', class: 'ghost-btn', onclick: backupNow }, [icon('history'), 'Back up now']),
+          el('button', { type: 'button', id: 'btnRevealBackups', class: 'ghost-btn', onclick: () => api.revealBackups() }, [icon('folder'), 'Open backups folder'])
+        ])
+      ]),
+      backupList
+    ]);
+  }
+
+  async function loadBackups() {
+    try {
+      state.backups = await api.listBackups();
+    } catch (err) {
+      state.backups = [];
+    }
+    if (!state.backups.length) {
+      backupList.replaceChildren(el('li', { class: 'muted-item', text: 'No backups yet.' }));
+      return;
+    }
+    backupList.replaceChildren(
+      ...state.backups.map((b) => {
+        const when = new Date(b.modifiedAt);
+        const label = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+        return el('li', { 'data-backup': b.name }, [
+          el('span', { class: 'when-col', text: label }),
+          el('span', { class: 'size-col', text: formatBytes(b.size) }),
+          el('button', {
+            type: 'button',
+            class: 'ghost-btn',
+            text: 'Restore…',
+            'aria-label': `Restore the backup from ${label}`,
+            onclick: () => confirmRestore(b, label)
+          })
+        ]);
+      })
+    );
+  }
+
+  async function backupNow() {
+    try {
+      const name = await api.createBackup();
+      await loadBackups();
+      showToast(name ? 'Backup saved' : 'Nothing to back up yet');
+    } catch (err) {
+      showActionError('Backup failed', err, backupNow);
+    }
+  }
+
+  function confirmRestore(backup, label) {
     openModal({
-      title: 'Preferences',
-      wide: true,
-      body,
+      title: 'Restore this backup?',
+      body: [
+        el('p', {}, ['Replace all notes and workspaces with the backup from ', el('strong', { text: label }), '?']),
+        el('p', { class: 'field-hint', text: 'Your current notes are saved as a new backup first. Restored notes start hidden; open them from the Notes Manager.' })
+      ],
       footerButtons: [
         { label: 'Cancel', onClick: closeModal },
         {
-          label: 'Save',
-          primary: true,
+          label: 'Restore backup',
+          danger: true,
           onClick: async () => {
-            const patch = {
-              defaultOpacity: Number(opacity.value) / 100,
-              defaultFontSize: Number(font.value),
-              defaultColor: color.value,
-              sortBy: sort.value,
-              defaultMonospace: $('sMono').checked,
-              globalClickThrough: $('sClick').checked
-            };
-            if (caps.contentProtection) patch.contentProtection = $('sProtect').checked;
-            if (caps.launchAtLogin) patch.launchAtLogin = $('sLogin').checked;
-            await api.updateSettings(patch);
-            state.sortBy = patch.sortBy;
-            els.sortBy.value = patch.sortBy;
+            const result = await api.restoreBackup(backup.name);
             closeModal();
+            state.selected.clear();
+            showToast(
+              `Restored ${plural(result.imported, 'note')} from ${label}`,
+              result.safety
+                ? {
+                    label: 'Undo',
+                    onClick: async () => {
+                      try {
+                        await api.restoreBackup(result.safety);
+                        await reload();
+                        await loadBackups();
+                        showToast('Restore undone');
+                      } catch (err) {
+                        showActionError('Could not undo the restore', err);
+                      }
+                    }
+                  }
+                : null
+            );
             await reload();
-            showToast('Preferences saved');
+            await loadBackups();
           }
         }
       ]
@@ -916,9 +1846,7 @@
   async function exportAll() {
     try {
       const result = await api.exportAll();
-      if (result) {
-        showToast(`Exported ${result.notes} note${result.notes === 1 ? '' : 's'} to ${result.filePath}`);
-      }
+      if (result) showToast(`Exported ${plural(result.notes, 'note')} to ${result.filePath}`);
     } catch (err) {
       showActionError('Export failed', err, exportAll);
     }
@@ -929,7 +1857,7 @@
       const result = await api.importAll(mode);
       if (result == null) return;
       await reload();
-      const lines = [`${result.imported} note${result.imported === 1 ? '' : 's'} imported. Imported notes start hidden; open them from this list.`];
+      const lines = [`${plural(result.imported, 'note')} imported. Imported notes start hidden; open them from this list.`];
       if (result.warning) lines.push(result.warning);
       openModal({
         title: 'Import complete',
@@ -975,6 +1903,7 @@
   // ---------- loading ----------
 
   async function reloadNotesOnly() {
+    const seq = ++listSeq;
     const filter = {
       workspaceId: state.activeWorkspaceId,
       tag: state.selectedTag || undefined,
@@ -983,8 +1912,10 @@
     };
     if (state.visibility === 'open') filter.visible = true;
     if (state.visibility === 'hidden') filter.visible = false;
-    state.notes = await api.listNotes(filter);
-    const ids = new Set(state.notes.map((n) => n.id));
+    const notes = await api.listNotes(filter);
+    if (seq !== listSeq) return;
+    state.notes = notes;
+    const ids = new Set(notes.map((n) => n.id));
     for (const id of [...state.selected]) {
       if (!ids.has(id)) state.selected.delete(id);
     }
@@ -992,37 +1923,62 @@
   }
 
   async function reload() {
+    const seq = ++reloadSeq;
     const boot = await api.getBootstrap();
+    const [allNotes, trash, recent] = await Promise.all([
+      api.listNotes({}),
+      api.listNotes({ trashed: true }),
+      api.getRecent(6)
+    ]);
+    const tags = await api.getTags(boot.activeWorkspaceId);
+    if (seq !== reloadSeq) return;
     state.bootstrap = boot;
+    document.documentElement.dataset.theme = boot.darkMode ? 'dark' : 'light';
     state.workspaces = boot.workspaces;
     state.activeWorkspaceId = boot.activeWorkspaceId;
-    if (boot.settings && boot.settings.sortBy) {
+    state.allNotes = allNotes;
+    state.trash = trash;
+    state.recent = recent;
+    state.tags = tags;
+    if (boot.settings.sortBy) {
       state.sortBy = boot.settings.sortBy;
       els.sortBy.value = state.sortBy;
     }
-    state.tags = await api.getTags(state.activeWorkspaceId);
-    if (state.selectedTag && !state.tags.includes(state.selectedTag)) state.selectedTag = null;
-    state.recent = await api.getRecent(8);
+    if (state.selectedTag && !tags.includes(state.selectedTag)) state.selectedTag = null;
+    renderSaveBanner(boot.saveError);
     await reloadNotesOnly();
     renderWorkspaces();
     renderTags();
     renderRecent();
+    renderTrashCount();
+    if (state.view === 'trash') renderTrash();
+    if (state.view === 'settings') syncSettings();
+  }
+
+  function applySearch(value) {
+    state.query = value.trim();
+    state.selected.clear();
+    return reloadNotesOnly();
   }
 
   els.search.addEventListener('input', () => {
     clearTimeout(state.searchTimer);
-    state.searchTimer = setTimeout(async () => {
-      state.query = els.search.value.trim();
-      state.selected.clear();
-      await reloadNotesOnly();
-    }, 120);
+    state.searchTimer = setTimeout(() => applySearch(els.search.value), 120);
+  });
+  els.search.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' && state.notes.length) {
+      e.preventDefault();
+      focusCard(state.focusId);
+    }
   });
 
-  els.visibilityFilter.addEventListener('change', async () => {
-    state.visibility = els.visibilityFilter.value;
-    state.selected.clear();
-    await reloadNotesOnly();
-  });
+  for (const btn of document.querySelectorAll('[data-visibility]')) {
+    btn.addEventListener('click', async () => {
+      state.visibility = btn.dataset.visibility;
+      state.selected.clear();
+      await reloadNotesOnly();
+    });
+  }
 
   els.sortBy.addEventListener('change', async () => {
     state.sortBy = els.sortBy.value;
@@ -1030,44 +1986,136 @@
     await reloadNotesOnly();
   });
 
+  els.btnBoard.addEventListener('click', () => setLayout('board'));
+  els.btnList.addEventListener('click', () => setLayout('list'));
+
   els.selectAll.addEventListener('change', () => {
     state.selected.clear();
     if (els.selectAll.checked) state.notes.forEach((n) => state.selected.add(n.id));
     renderNotes();
   });
 
+  const selectedNotes = () => state.notes.filter((n) => state.selected.has(n.id));
+
   async function bulkVisible(visible) {
     const ids = [...state.selected];
     state.selected.clear();
-    await run(visible ? 'Could not show the notes' : 'Could not hide every note', () =>
-      api.bulkVisible(ids, visible)
-    );
+    await run(visible ? 'Could not show the notes' : 'Could not hide every note', () => api.bulkVisible(ids, visible));
   }
 
   els.btnBulkShow.addEventListener('click', () => bulkVisible(true));
   els.btnBulkHide.addEventListener('click', () => bulkVisible(false));
+  els.btnBulkTrash.addEventListener('click', () => trashNotes(selectedNotes()));
 
-  function createFromToolbar() {
-    return run('Could not create a note', () =>
-      api.createNote({
-        templateId: els.templateSelect.value || 'blank',
-        workspaceId: state.activeWorkspaceId
-      })
+  els.noteList.addEventListener('keydown', (e) => {
+    const card = e.target.closest('.note-card');
+    if (!card || e.target !== card) return;
+    const cards = cardEls();
+    const i = cards.indexOf(card);
+    const note = noteById(card.dataset.noteId);
+    if (!note) return;
+    let cols = 1;
+    if (state.layout === 'board') {
+      cols = cards.filter((c) => c.offsetTop === cards[0].offsetTop).length || 1;
+    }
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+    if (step && !(state.layout === 'list' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight'))) {
+      e.preventDefault();
+      if (e.key === 'ArrowUp' && i - cols < 0) {
+        els.search.focus();
+        return;
+      }
+      const next = cards[Math.min(cards.length - 1, Math.max(0, i + step))];
+      focusCard(next.dataset.noteId);
+      return;
+    }
+    if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      focusCard((e.key === 'Home' ? cards[0] : cards[cards.length - 1]).dataset.noteId);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      openNote(note);
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      toggleSelected(note.id, !state.selected.has(note.id));
+    } else if (e.key === 'Delete' || (isMac() && e.key === 'Backspace' && e.metaKey)) {
+      e.preventDefault();
+      trashNotes(state.selected.has(note.id) ? selectedNotes() : [note]);
+    } else if (e.key === 'F2') {
+      e.preventDefault();
+      startRename(note.id);
+    } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      openNoteMenu(note, { anchor: card.querySelector('.card-more') });
+    }
+  });
+
+  els.noteList.addEventListener('focusin', (e) => {
+    const card = e.target.closest('.note-card');
+    if (card && e.target === card) {
+      state.focusId = card.dataset.noteId;
+      for (const c of cardEls()) c.tabIndex = c === card ? 0 : -1;
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (state.recording || !els.modal.classList.contains('hidden') || !els.menu.classList.contains('hidden')) return;
+    const typing = Boolean(e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]'));
+    const mod = isMac() ? e.metaKey : e.ctrlKey;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if ((mod && key === 'f') || (!typing && !mod && key === '/')) {
+      e.preventDefault();
+      if (state.view !== 'notes') showView('notes');
+      els.search.focus();
+      els.search.select();
+    } else if (mod && !e.shiftKey && !e.altKey && key === 'n') {
+      e.preventDefault();
+      createNote('blank');
+    } else if (mod && key === ',') {
+      e.preventDefault();
+      showView('settings');
+    } else if (mod && key === 'a' && !typing && state.view === 'notes') {
+      e.preventDefault();
+      state.notes.forEach((n) => state.selected.add(n.id));
+      renderNotes();
+    } else if (e.key === 'Escape') {
+      if (e.target === els.search && els.search.value) {
+        e.preventDefault();
+        els.search.value = '';
+        applySearch('');
+      } else if (state.view === 'notes' && state.selected.size) {
+        state.selected.clear();
+        renderNotes();
+      } else if (state.view !== 'notes' && !typing) {
+        showView('notes');
+      }
+    }
+  });
+
+  els.btnNewNote.addEventListener('click', () => createNote('blank'));
+  els.btnEmptyNew.addEventListener('click', () => createNote('blank'));
+  els.btnTemplates.addEventListener('click', () => {
+    if (anchorJustClosed(els.btnTemplates)) return;
+    openMenu(
+      (state.bootstrap.templates || []).map((t) => ({
+        label: t.label,
+        icon: 'notes',
+        attrs: { 'data-template': t.id },
+        onSelect: () => createNote(t.id)
+      })),
+      { anchor: els.btnTemplates, label: 'Templates' }
     );
-  }
-
-  els.btnNewNote.addEventListener('click', createFromToolbar);
-  els.btnEmptyNew.addEventListener('click', createFromToolbar);
+  });
   els.btnNewWs.addEventListener('click', promptNewWorkspace);
-  els.btnSettings.addEventListener('click', showSettings);
-  els.btnShortcuts.addEventListener('click', showShortcuts);
-  els.btnExport.addEventListener('click', exportAll);
-  els.btnImport.addEventListener('click', promptImport);
+  els.btnTrash.addEventListener('click', () => showView(state.view === 'trash' ? 'notes' : 'trash'));
+  els.btnEmptyTrash.addEventListener('click', confirmEmptyTrash);
+  els.btnSettings.addEventListener('click', () => showView('settings'));
+  els.btnShortcuts.addEventListener('click', () => showView('settings', { section: 'setShortcuts' }));
 
   api.onSaveState((saveState) => renderSaveBanner(saveState.ok ? null : saveState.message));
   api.onRefresh(() => reload().catch((err) => console.error(err)));
-  api.onShowShortcuts(() => showShortcuts());
-  api.onShowSettings(() => showSettings());
+  api.onShowShortcuts(() => showView('settings', { section: 'setShortcuts' }));
+  api.onShowSettings(() => showView('settings'));
 
   window.addEventListener('beforeunload', () => {
     if (state.recording) api.pauseShortcuts(false);
@@ -1084,14 +2132,14 @@
 
   async function init() {
     state.bootstrap = await api.getBootstrap();
-    renderSaveBanner(state.bootstrap.saveError);
-    (state.bootstrap.colors || []).forEach((c) => {
-      COLOR_MAP[c.id] = c.hex;
-    });
-    els.templateSelect.replaceChildren(
-      ...(state.bootstrap.templates || []).map((t) => el('option', { value: t.id, text: t.label }))
-    );
+    const s = state.bootstrap.settings;
+    state.layout = s.managerView === 'list' ? 'list' : 'board';
+    els.btnBoard.setAttribute('aria-pressed', String(state.layout === 'board'));
+    els.btnList.setAttribute('aria-pressed', String(state.layout === 'list'));
+    els.brandSub.textContent = `Notes Manager · ${state.bootstrap.version}`;
+    els.searchHint.textContent = '/';
     await reload();
+    els.search.focus();
   }
 
   init().catch((err) => {

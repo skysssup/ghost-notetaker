@@ -9,44 +9,51 @@
     return;
   }
 
+  const $ = (id) => document.getElementById(id);
   const els = {
-    shell: document.getElementById('shell'),
-    chrome: document.getElementById('chrome'),
-    title: document.getElementById('title'),
-    editor: document.getElementById('editor'),
-    preview: document.getElementById('preview'),
-    mdToolbar: document.getElementById('mdToolbar'),
-    btnPreview: document.getElementById('btnPreview'),
-    btnMono: document.getElementById('btnMono'),
-    btnPin: document.getElementById('btnPin'),
-    btnGhost: document.getElementById('btnGhost'),
-    btnMore: document.getElementById('btnMore'),
-    morePanel: document.getElementById('morePanel'),
-    palette: document.getElementById('palette'),
-    opacity: document.getElementById('opacity'),
-    opacityValue: document.getElementById('opacityValue'),
-    fontSize: document.getElementById('fontSize'),
-    fontSizeValue: document.getElementById('fontSizeValue'),
-    btnNew: document.getElementById('btnNew'),
-    btnHide: document.getElementById('btnHide'),
-    tagChips: document.getElementById('tagChips'),
-    tagInput: document.getElementById('tagInput'),
-    saveStatus: document.getElementById('saveStatus'),
-    modeLabel: document.getElementById('modeLabel')
+    shell: $('shell'),
+    chrome: $('chrome'),
+    title: $('title'),
+    editor: $('editor'),
+    preview: $('preview'),
+    mdToolbar: $('mdToolbar'),
+    btnPreview: $('btnPreview'),
+    btnMono: $('btnMono'),
+    btnPin: $('btnPin'),
+    btnGhost: $('btnGhost'),
+    btnCollapse: $('btnCollapse'),
+    btnMore: $('btnMore'),
+    morePanel: $('morePanel'),
+    palette: $('palette'),
+    opacity: $('opacity'),
+    opacityValue: $('opacityValue'),
+    fontSize: $('fontSize'),
+    fontSizeValue: $('fontSizeValue'),
+    btnNew: $('btnNew'),
+    btnHide: $('btnHide'),
+    tagChips: $('tagChips'),
+    tagInput: $('tagInput'),
+    saveStatus: $('saveStatus'),
+    modeLabel: $('modeLabel'),
+    bubble: $('bubble'),
+    bubbleInitial: $('bubbleInitial')
   };
 
   const SAVE_FAILED = 'Not saved yet. Your text is kept here and saving is retried.';
   const DISK_FAILED = 'Not written to disk yet. Ghost Notetaker keeps your text and retries.';
+  const md = window.GhostMarkdown;
   let localSaveFailed = false;
   let diskSaveFailed = false;
+  let flashMessage = '';
+  let flashTimer = null;
   let note = null;
   let colors = [];
   let applying = false;
+  // Show formatted Markdown whenever the note is not being edited.
+  let formattedWhenIdle = true;
+  let editing = params.get('edit') === '1';
 
-  function colorHex(id) {
-    const c = colors.find((x) => x.id === id);
-    return (c && c.hex) || '#c8d6e5';
-  }
+  const colorOf = (id) => colors.find((x) => x.id === id) || { hex: '#dfe6ee', ink: 'dark' };
 
   function setPressed(btn, on) {
     btn.classList.toggle('active', on);
@@ -79,8 +86,7 @@
       x.textContent = '×';
       chip.append(label, x);
       chip.addEventListener('click', () => {
-        const tags = (note.tags || []).filter((t) => t !== tag);
-        queueSave({ tags });
+        queueSave({ tags: (note.tags || []).filter((t) => t !== tag) });
         renderTags();
       });
       els.tagChips.appendChild(chip);
@@ -88,13 +94,17 @@
   }
 
   function applyStyle() {
+    const color = colorOf(note.color);
     const opacityPct = Math.round((note.opacity || 0.88) * 100);
     const fontSize = note.fontSize || 14;
     els.opacity.value = opacityPct;
     els.opacityValue.textContent = `${opacityPct}%`;
     els.fontSize.value = fontSize;
     els.fontSizeValue.textContent = `${fontSize}px`;
-    els.shell.style.setProperty('--note-tint', colorHex(note.color));
+    for (const el of [els.shell, els.bubble]) {
+      el.style.setProperty('--note-tint', color.hex);
+      el.classList.toggle('ink-light', color.ink === 'light');
+    }
     els.shell.style.setProperty('--opacity', String(note.opacity || 0.88));
     els.shell.style.setProperty('--font-size', `${fontSize}px`);
     els.shell.classList.toggle('mono', Boolean(note.monospace));
@@ -104,6 +114,34 @@
     for (const swatch of els.palette.children) {
       swatch.setAttribute('aria-checked', String(swatch.dataset.color === note.color));
     }
+    const initial = /[\p{L}\p{N}]/u.exec(note.title || '');
+    els.bubbleInitial.textContent = initial ? initial[0].toUpperCase() : '';
+    els.bubble.title = `${note.title || 'Untitled'} — click to expand, drag to move`;
+  }
+
+  /** Which view the note shows right now. */
+  function currentView() {
+    if (note.collapsed) return 'bubble';
+    if (note.previewMode) return 'reading';
+    if (editing || !formattedWhenIdle || !String(note.content || '').trim()) return 'editing';
+    return 'formatted';
+  }
+
+  function render() {
+    const view = currentView();
+    document.body.classList.toggle('collapsed', view === 'bubble');
+    els.bubble.hidden = view !== 'bubble';
+    const showPreview = view === 'reading' || view === 'formatted';
+    els.editor.classList.toggle('hidden', showPreview);
+    els.preview.classList.toggle('hidden', !showPreview);
+    els.mdToolbar.classList.toggle('hidden', showPreview);
+    els.shell.classList.toggle('reading', view === 'reading');
+    els.modeLabel.textContent = { reading: 'reading', formatted: 'click to edit', editing: 'editing' }[view] || '';
+    setPressed(els.btnPreview, view === 'reading');
+    const label = view === 'reading' ? 'Reading mode is on (click text does not edit)' : 'Reading mode';
+    els.btnPreview.title = label;
+    els.btnPreview.setAttribute('aria-label', label);
+    if (showPreview) renderPreview();
   }
 
   /**
@@ -117,46 +155,82 @@
     setValuePreservingSelection(els.title, note.title || '');
     setValuePreservingSelection(els.editor, note.content || '');
     applyStyle();
-    setPreviewMode(Boolean(note.previewMode));
+    render();
     renderTags();
     applying = false;
   }
 
-  function setPreviewMode(on) {
-    els.editor.classList.toggle('hidden', on);
-    els.preview.classList.toggle('hidden', !on);
-    els.mdToolbar.classList.toggle('hidden', on);
-    els.modeLabel.textContent = on ? 'preview' : 'edit';
-    setPressed(els.btnPreview, on);
-    const label = on ? 'Back to editing' : 'Markdown preview';
-    els.btnPreview.title = label;
-    els.btnPreview.setAttribute('aria-label', label);
-    els.btnPreview.querySelector('use').setAttribute('href', on ? '#i-edit' : '#i-eye');
-    if (on) renderPreview();
+  function renderPreview() {
+    els.preview.innerHTML = md.renderMarkdown(els.editor.value);
   }
 
-  function renderPreview() {
-    const md = window.GhostMarkdown;
-    els.preview.innerHTML = md.renderMarkdown(els.editor.value);
-    els.preview.querySelectorAll('.task-check').forEach((input) => {
-      input.addEventListener('change', () => {
-        const li = input.closest('[data-task-line]');
-        if (!li) return;
-        const line = Number(li.getAttribute('data-task-line'));
-        const next = md.toggleTaskAtLine(els.editor.value, line);
-        els.editor.value = next;
-        queueSave({ content: next });
-        renderPreview();
-      });
-    });
-    els.preview.querySelectorAll('a').forEach((a) => {
-      a.addEventListener('click', (e) => {
-        e.preventDefault();
-        const href = a.getAttribute('href');
-        if (href) window.ghostNote.openExternal(href);
-      });
-    });
+  /** Source line for a click inside the formatted view. */
+  function lineForTarget(target) {
+    const item = target.closest('[data-line]');
+    if (item && els.preview.contains(item)) return Number(item.getAttribute('data-line'));
+    let block = target;
+    while (block && block.parentNode !== els.preview) block = block.parentNode;
+    for (let node = block; node; node = node.previousSibling) {
+      if (node.nodeType === Node.COMMENT_NODE && /^L\d+$/.test(node.data)) return Number(node.data.slice(1));
+    }
+    return null;
   }
+
+  function startEditing(line) {
+    if (note.collapsed) return;
+    editing = true;
+    render();
+    els.editor.focus();
+    const value = els.editor.value;
+    let pos = value.length;
+    if (line != null) {
+      const start = md.lineOffset(value, line);
+      const end = value.indexOf('\n', start);
+      pos = end === -1 ? value.length : end;
+    }
+    els.editor.setSelectionRange(pos, pos);
+  }
+
+  function stopEditing() {
+    if (!editing) return;
+    editing = false;
+    render();
+  }
+
+  els.preview.addEventListener('click', (e) => {
+    const check = e.target.closest('.task-check');
+    if (check) {
+      const item = check.closest('[data-task-line]');
+      const next = md.toggleTaskAtLine(els.editor.value, Number(item.getAttribute('data-task-line')));
+      els.editor.value = next;
+      queueSave({ content: next });
+      renderPreview();
+      return;
+    }
+    const link = e.target.closest('a');
+    if (link) {
+      e.preventDefault();
+      const href = link.getAttribute('href');
+      if (href) window.ghostNote.openExternal(href);
+      return;
+    }
+    if (currentView() !== 'formatted') return;
+    // In the formatted view only the box itself ticks a task; its text edits.
+    if (e.target.closest('.task-item label')) e.preventDefault();
+    startEditing(lineForTarget(e.target));
+  });
+
+  els.preview.addEventListener('keydown', (e) => {
+    if (currentView() === 'formatted' && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      startEditing(null);
+    }
+  });
+
+  // Leaving the window shows the formatted note again.
+  window.addEventListener('blur', () => {
+    if (formattedWhenIdle) stopEditing();
+  });
 
   let retryTimer = null;
   const saveQueue = window.GhostSaveQueue.createSaveQueue({
@@ -186,10 +260,21 @@
   }
 
   function renderSaveStatus() {
-    const message = localSaveFailed ? SAVE_FAILED : diskSaveFailed ? DISK_FAILED : '';
+    const message = localSaveFailed ? SAVE_FAILED : diskSaveFailed ? DISK_FAILED : flashMessage;
     els.saveStatus.hidden = !message;
     els.saveStatus.textContent = message;
-    els.shell.classList.toggle('has-error', Boolean(message));
+    els.saveStatus.classList.toggle('info', !localSaveFailed && !diskSaveFailed);
+    els.shell.classList.toggle('has-status', Boolean(message));
+  }
+
+  function flash(message) {
+    flashMessage = message;
+    renderSaveStatus();
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => {
+      flashMessage = '';
+      renderSaveStatus();
+    }, 4000);
   }
 
   async function flushNow() {
@@ -275,6 +360,14 @@
     replaceRange(ta.selectionStart, ta.selectionEnd, text, pos, pos);
   }
 
+  /** Insert text on its own line(s) at the caret. */
+  function insertBlock(text) {
+    const ta = els.editor;
+    const before = ta.value.slice(0, ta.selectionStart);
+    const lead = before && !before.endsWith('\n') ? '\n' : '';
+    insertAtCursor(`${lead}${text}\n`);
+  }
+
   const MD_ACTIONS = {
     h2: () => prefixLines('## '),
     bold: () => wrapSelection('**', '**', 'bold'),
@@ -286,15 +379,92 @@
     ol: () => prefixLines('1. '),
     task: () => prefixLines('- [ ] '),
     quote: () => prefixLines('> '),
+    table: () => insertBlock('| Column | Column |\n| --- | --- |\n|  |  |'),
     hr: () => insertAtCursor('\n---\n')
   };
 
   els.mdToolbar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-md]');
-    if (!btn || !note || note.previewMode) return;
+    if (!btn || !note || currentView() !== 'editing') return;
     const action = MD_ACTIONS[btn.getAttribute('data-md')];
     if (action) action();
   });
+
+  // ---------- images ----------
+
+  const IMAGE_TYPES = /^image\/(png|jpeg|gif|webp)$/;
+
+  async function addImages(files) {
+    for (const file of files) {
+      try {
+        const url = await window.ghostNote.saveImage(noteId, new Uint8Array(await file.arrayBuffer()));
+        const alt = (file.name || 'image').replace(/\.[a-z0-9]+$/i, '').replace(/[[\]]/g, '') || 'image';
+        insertBlock(`![${alt}](${url})`);
+      } catch (err) {
+        flash(String((err && err.message) || err).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''));
+      }
+    }
+  }
+
+  const imageFiles = (list) => Array.from(list || []).filter((f) => IMAGE_TYPES.test(f.type));
+
+  els.editor.addEventListener('paste', (e) => {
+    const files = imageFiles(e.clipboardData && e.clipboardData.files);
+    if (!files.length) return;
+    e.preventDefault();
+    addImages(files);
+  });
+
+  document.addEventListener('dragover', (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  });
+
+  document.addEventListener('drop', (e) => {
+    const files = imageFiles(e.dataTransfer && e.dataTransfer.files);
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files')) return;
+    e.preventDefault();
+    if (!files.length) {
+      flash('Only PNG, JPEG, GIF, and WebP images can be added');
+      return;
+    }
+    if (currentView() !== 'editing') startEditing(null);
+    addImages(files);
+  });
+
+  // ---------- bubble ----------
+
+  let drag = null;
+  els.bubble.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    els.bubble.setPointerCapture(e.pointerId);
+    drag = { x: e.screenX, y: e.screenY, moved: false };
+  });
+  els.bubble.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.screenX - drag.x;
+    const dy = e.screenY - drag.y;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+    drag.moved = true;
+    drag.x = e.screenX;
+    drag.y = e.screenY;
+    window.ghostNote.moveBy(noteId, dx, dy);
+  });
+  els.bubble.addEventListener('pointerup', () => {
+    const wasClick = drag && !drag.moved;
+    drag = null;
+    if (wasClick) window.ghostNote.setCollapsed(noteId, false);
+  });
+  els.bubble.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      window.ghostNote.setCollapsed(noteId, false);
+    }
+  });
+
+  // ---------- chrome ----------
 
   let chromeHover = false;
   function setChromeHover(on) {
@@ -308,8 +478,17 @@
     el.addEventListener('mouseleave', () => setChromeHover(false));
   }
 
-  els.title.addEventListener('input', () => queueSave({ title: els.title.value }));
+  els.title.addEventListener('input', () => {
+    queueSave({ title: els.title.value });
+    applyStyle();
+  });
   els.editor.addEventListener('input', () => queueSave({ content: els.editor.value }));
+  els.editor.addEventListener('focus', () => {
+    if (!editing) {
+      editing = true;
+      render();
+    }
+  });
 
   els.opacity.addEventListener('input', () => {
     queueSave({ opacity: Number(els.opacity.value) / 100 });
@@ -322,9 +501,9 @@
   });
 
   els.btnPreview.addEventListener('click', () => {
-    const previewMode = !note.previewMode;
-    queueSave({ previewMode });
-    setPreviewMode(previewMode);
+    queueSave({ previewMode: !note.previewMode });
+    if (!note.previewMode) editing = true;
+    render();
   });
 
   els.btnMono.addEventListener('click', () => {
@@ -344,6 +523,12 @@
     applyStyle();
   });
 
+  els.btnCollapse.addEventListener('click', async () => {
+    setMoreOpen(false);
+    await flushNow();
+    window.ghostNote.setCollapsed(noteId, true);
+  });
+
   els.btnMore.addEventListener('click', (e) => {
     e.stopPropagation();
     setMoreOpen(els.morePanel.classList.contains('hidden'));
@@ -354,9 +539,15 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !els.morePanel.classList.contains('hidden')) {
+    if (e.key !== 'Escape') return;
+    if (!els.morePanel.classList.contains('hidden')) {
       setMoreOpen(false);
       els.btnMore.focus();
+    } else if (editing && formattedWhenIdle && document.activeElement === els.editor) {
+      els.editor.blur();
+      editing = false;
+      render();
+      els.preview.focus();
     }
   });
 
@@ -388,8 +579,7 @@
       .slice(0, 32);
     els.tagInput.value = '';
     if (!raw) return;
-    const tags = Array.from(new Set([...(note.tags || []), raw]));
-    queueSave({ tags });
+    queueSave({ tags: Array.from(new Set([...(note.tags || []), raw])) });
     renderTags();
   }
 
@@ -418,6 +608,11 @@
     if (n && n.id === noteId && note) applyLocal(n);
   });
 
+  window.ghostNote.onSettings((s) => {
+    formattedWhenIdle = s.formattedWhenIdle !== false;
+    if (note) render();
+  });
+
   window.ghostNote.onSaveState((state) => {
     diskSaveFailed = !state.ok;
     renderSaveStatus();
@@ -441,6 +636,7 @@
   async function init() {
     const boot = await window.ghostNote.getBootstrap();
     colors = boot.colors || [];
+    formattedWhenIdle = boot.settings.formattedWhenIdle !== false;
     buildPalette();
     diskSaveFailed = Boolean(boot.saveError);
     renderSaveStatus();
@@ -454,6 +650,7 @@
       return;
     }
     applyLocal(n);
+    if (editing && currentView() === 'editing') startEditing(null);
   }
 
   init().catch((err) => {

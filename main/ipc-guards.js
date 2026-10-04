@@ -75,8 +75,16 @@ function sanitizeCreateOptions(options) {
   return out;
 }
 
-const SETTINGS_BOOL = ['globalClickThrough', 'contentProtection', 'launchAtLogin', 'defaultMonospace'];
+const SETTINGS_BOOL = [
+  'globalClickThrough',
+  'contentProtection',
+  'launchAtLogin',
+  'defaultMonospace',
+  'formattedWhenIdle'
+];
 const SORT_KEYS = ['updated', 'created', 'title', 'color'];
+const THEMES = ['system', 'light', 'dark'];
+const MANAGER_VIEWS = ['board', 'list'];
 
 function sanitizeSettingsPatch(patch) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
@@ -100,6 +108,8 @@ function sanitizeSettingsPatch(patch) {
   if (patch.sortBy && SORT_KEYS.includes(patch.sortBy)) {
     out.sortBy = patch.sortBy;
   }
+  if (THEMES.includes(patch.theme)) out.theme = patch.theme;
+  if (MANAGER_VIEWS.includes(patch.managerView)) out.managerView = patch.managerView;
   if (patch.shortcuts && typeof patch.shortcuts === 'object') {
     const allowed = Object.keys(defaultShortcuts());
     const next = {};

@@ -40,6 +40,9 @@ function readStore(file) {
   }
 }
 
+// A 2x2 PNG for the paste check.
+const SMOKE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=';
+
 async function main() {
   const executablePath = path.resolve(process.argv[2] || defaultExecutable());
   if (!fs.existsSync(executablePath)) throw new Error(`Executable not found: ${executablePath}`);
@@ -57,8 +60,13 @@ async function main() {
     await waitFor(async () => (await note.inputValue('#title')) === 'Ghost Notetaker', 'welcome note');
     report.welcomeNote = true;
 
+    // The welcome note opens formatted; Enter on the formatted view starts editing.
+    await note.waitForSelector('#preview:not(.hidden)');
+    report.formattedWelcome = (await note.locator('#preview .task-check').count()) > 0;
     const marker = `smoke ${Date.now()}`;
-    await note.click('#btnPreview');
+    await note.focus('#preview');
+    await note.keyboard.press('Enter');
+    await note.waitForSelector('#editor:not(.hidden)');
     await note.click('#editor');
     await note.evaluate(() => {
       const ta = document.getElementById('editor');
@@ -70,6 +78,24 @@ async function main() {
       return store && store.notes.some((n) => n.content.includes(marker));
     }, 'typed text on disk');
     report.typingPersisted = true;
+
+    // A pasted image is stored in the profile and served back through ghost-image://.
+    await note.evaluate((b64) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([bytes], 'smoke.png', { type: 'image/png' }));
+      document.getElementById('editor').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+    }, SMOKE_PNG);
+    await waitFor(() => {
+      const store = readStore(dataFile);
+      return store && store.notes.some((n) => /ghost-image:\/\/img\/[a-f0-9]{16}\.png/.test(n.content));
+    }, 'pasted image on disk');
+    await note.keyboard.press('Escape');
+    await waitFor(
+      async () => (await note.evaluate(() => (document.querySelector('#preview img') || {}).naturalWidth)) === 2,
+      'pasted image shown'
+    );
+    report.imageShown = true;
 
     report.contentProtected = await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().map((w) => w.isContentProtected())
@@ -85,6 +111,7 @@ async function main() {
     const manager = await managerOpened;
     await manager.waitForSelector('.note-card');
     report.managerNoteCount = await manager.locator('.note-card').count();
+    report.managerRendersMarkdown = (await manager.locator('.note-card .card-body li').count()) > 0;
     report.secondInstanceExitCode = await secondExit;
   } finally {
     await app.close();
@@ -96,7 +123,10 @@ async function main() {
   const expectProtection = process.platform === 'darwin' || process.platform === 'win32';
   const ok =
     report.welcomeNote &&
+    report.formattedWelcome &&
     report.typingPersisted &&
+    report.imageShown &&
+    report.managerRendersMarkdown &&
     report.managerNoteCount === 1 &&
     report.secondInstanceExitCode === 0 &&
     report.persistedAfterQuit &&

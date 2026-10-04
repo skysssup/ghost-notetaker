@@ -9,7 +9,9 @@ const {
   firstNote,
   openManager,
   noteIdOf,
-  noteWindow
+  noteWindow,
+  openWindowIds,
+  showNotes
 } = require('./helpers');
 
 let running = [];
@@ -37,7 +39,7 @@ describe('keyboard shortcuts and preferences', () => {
     await manager.click('#btnShortcuts');
     await manager.waitForSelector('.shortcut-table tbody tr');
     assert.equal(await manager.locator('.shortcut-table tbody tr').count(), 7);
-    assert.equal(await row(manager, /^Toggle Markdown preview/).locator('.status').textContent(), 'In notes only');
+    assert.equal(await row(manager, /^Toggle reading mode/).locator('.status').textContent(), 'In notes only');
     const statuses = await manager.locator('.shortcut-table tbody .status').allTextContents();
     assert.ok(statuses.every((s) => ['Works everywhere', 'In notes only', 'Taken by another app or the OS'].includes(s)), statuses.join());
   });
@@ -63,7 +65,7 @@ describe('keyboard shortcuts and preferences', () => {
     await waitForStore(dataFile, (s) => s.settings.shortcuts.quickCapture === '', 'cleared on disk');
     await waitFor(async () => (await row(manager, /^Quick capture/).locator('.status').textContent()) === 'Off', 'shown as off');
 
-    await manager.click('#modalFooter button:has-text("Reset to defaults")');
+    await manager.click('#btnResetShortcuts');
     await waitForStore(
       dataFile,
       (s) => s.settings.shortcuts.newNote === 'CommandOrControl+Shift+N' && s.settings.shortcuts.quickCapture === 'CommandOrControl+Shift+Q',
@@ -79,9 +81,9 @@ describe('keyboard shortcuts and preferences', () => {
     await manager.waitForSelector('.kbd.recording');
     await manager.keyboard.press('Escape');
     await manager.waitForSelector('.kbd.recording', { state: 'detached' });
-    assert.equal(await manager.isVisible('#modal'), true, 'Escape while recording must not close the dialog');
+    assert.equal(await manager.isVisible('#settingsView'), true, 'Escape while recording must not leave Settings');
     await manager.keyboard.press('Escape');
-    await manager.waitForSelector('#modal.hidden', { state: 'attached' });
+    await manager.waitForSelector('#settingsView', { state: 'hidden' });
     await new Promise((r) => setTimeout(r, 400));
     const store = await waitForStore(dataFile, () => true);
     assert.equal(store.settings.shortcuts.hideShowAll, 'CommandOrControl+Shift+H');
@@ -91,13 +93,17 @@ describe('keyboard shortcuts and preferences', () => {
     const ctx = await start();
     const { manager, dataFile } = ctx;
     await manager.click('#btnSettings');
-    await manager.selectOption('#sColor', 'rose');
+    await manager.click('#sColor [data-color="rose"]');
     await manager.locator('#sOpacity').fill('50');
     await manager.fill('#sFont', '20');
     await manager.check('#sMono');
-    await manager.click('#modalFooter .primary-btn');
-    await manager.waitForSelector('#toast:not(.hidden)');
-    await waitForStore(dataFile, (s) => s.settings.defaultColor === 'rose' && s.settings.defaultFontSize === 20, 'settings on disk');
+    await manager.waitForSelector('#settingsSaved:not([hidden])');
+    await waitForStore(
+      dataFile,
+      (s) => s.settings.defaultColor === 'rose' && s.settings.defaultFontSize === 20 && s.settings.defaultOpacity === 0.5 && s.settings.defaultMonospace,
+      'settings on disk'
+    );
+    await showNotes(manager);
 
     const before = new Set(ctx.app.windows());
     await manager.click('#btnNewNote');
@@ -122,15 +128,85 @@ describe('keyboard shortcuts and preferences', () => {
     if (process.platform === 'linux') {
       assert.equal(await protect.isDisabled(), true);
       assert.equal(await login.isDisabled(), true);
-      assert.match(await ctx.manager.locator('#modalBody').textContent(), /Not available on Linux/);
+      assert.match(await ctx.manager.locator('#setPrivacy').textContent(), /Not available on Linux/);
       assert.ok((await protectedNow()).every((v) => v === false));
       return;
     }
     assert.equal(await protect.isChecked(), true);
     assert.ok((await protectedNow()).every((v) => v === true));
     await protect.uncheck();
-    await ctx.manager.click('#modalFooter .primary-btn');
     await waitForStore(ctx.dataFile, (s) => s.settings.contentProtection === false, 'setting on disk');
     await waitFor(async () => (await protectedNow()).every((v) => v === false), 'protection removed');
+  });
+  it('a global shortcut can be limited to Ghost Notetaker windows', async () => {
+    const { app, manager, dataFile } = await start();
+    const registered = (accel) => app.evaluate(({ globalShortcut }, a) => globalShortcut.isRegistered(a), accel);
+    await manager.click('#btnShortcuts');
+    await manager.waitForSelector('.shortcut-table tbody tr');
+    const newNote = row(manager, /^New note$/);
+    const before = await newNote.locator('.status').textContent();
+
+    await newNote.locator('select').selectOption('app');
+    await waitForStore(dataFile, (s) => s.settings.shortcutScopes.newNote === 'app', 'scope on disk');
+    await waitFor(async () => (await newNote.locator('.status').textContent()) === 'Only in Ghost Notetaker', 'status');
+    assert.equal(await registered('CommandOrControl+Shift+N'), false);
+
+    await newNote.locator('select').selectOption('global');
+    await waitForStore(dataFile, (s) => s.settings.shortcutScopes.newNote === 'global', 'scope back to everywhere');
+    await waitFor(async () => (await newNote.locator('.status').textContent()) === before, 'status restored');
+    if (before === 'Works everywhere') assert.equal(await registered('CommandOrControl+Shift+N'), true);
+  });
+
+  it('the theme setting switches the Notes Manager between light and dark', async () => {
+    const { manager, dataFile } = await start();
+    await manager.click('#btnSettings');
+    await manager.click('.theme-option[data-theme="light"]');
+    await waitFor(async () => (await manager.getAttribute('html', 'data-theme')) === 'light', 'light');
+    await waitForStore(dataFile, (s) => s.settings.theme === 'light', 'theme on disk');
+    const lightBg = await manager.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await manager.click('.theme-option[data-theme="dark"]');
+    await waitFor(async () => (await manager.getAttribute('html', 'data-theme')) === 'dark', 'dark');
+    const darkBg = await manager.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    assert.notEqual(lightBg, darkBg);
+    assert.equal(await manager.getAttribute('.theme-option[data-theme="dark"]', 'aria-checked'), 'true');
+  });
+
+  it('turning off the formatted view shows notes as Markdown source', async () => {
+    const { manager, note, dataFile } = await start();
+    await note.waitForSelector('#preview:not(.hidden)');
+    await manager.click('#btnSettings');
+    await manager.uncheck('#sFormatted');
+    await waitForStore(dataFile, (s) => s.settings.formattedWhenIdle === false, 'setting on disk');
+    await note.waitForSelector('#editor:not(.hidden)');
+    assert.equal(await note.isVisible('#preview'), false);
+  });
+
+  it('backs up on demand and restores a backup, with undo', async () => {
+    const ctx = await start();
+    const { app, manager, dataFile, userDataDir } = ctx;
+    await manager.click('#btnSettings');
+    await manager.waitForSelector('#backupList li[data-backup]');
+    const daily = await manager.locator('#backupList li[data-backup]').count();
+    assert.equal(daily, 1, 'the daily backup is made at startup');
+    await manager.click('#btnBackupNow');
+    await waitFor(async () => (await manager.locator('#backupList li[data-backup]').count()) === 2, 'second backup');
+    const fs = require('node:fs');
+    const path = require('node:path');
+    assert.equal(fs.readdirSync(path.join(userDataDir, 'backups')).length, 2);
+
+    await showNotes(manager);
+    const before = new Set(app.windows());
+    await manager.click('#btnNewNote');
+    await waitFor(() => app.windows().find((w) => !before.has(w) && w.url().includes('note.html')), 'new note');
+    await waitForStore(dataFile, (s) => s.notes.length === 2, 'two notes');
+
+    await manager.click('#btnSettings');
+    await manager.locator('#backupList li[data-backup]').first().getByRole('button', { name: /Restore/ }).click();
+    await manager.click('#modalFooter .danger-btn');
+    await waitForStore(dataFile, (s) => s.notes.length === 1 && s.notes.every((n) => !n.visible), 'restored');
+    await waitFor(async () => (await openWindowIds(app)).length === 0, 'restored notes start hidden');
+    await waitFor(async () => /Restored 1 note/.test(await manager.locator('#toastText').textContent()), 'restore message');
+    await manager.click('#toastAction');
+    await waitForStore(dataFile, (s) => s.notes.length === 2, 'restore undone');
   });
 });

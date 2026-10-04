@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.5.0] - 2026-10-04
+
+### Added
+
+- **Formatted view.** Notes show formatted Markdown whenever you are not typing in them. Click a line to edit the source with the caret on that line; click elsewhere or press `Esc` to see it formatted again. **Settings → Show formatted Markdown when not editing** turns this off.
+- **More Markdown.** Tables with column alignment, nested lists, numbered lists that keep their start number, and images.
+- **Images.** Paste a screenshot or drop a PNG, JPEG, GIF, or WebP file (up to 10 MB) onto a note. Images are stored in an `images` folder next to the notes file, are included in **Export all notes**, and are embedded when a note is exported as Markdown. Images on the web are never loaded.
+- **Bubbles.** The **–** button shrinks a note to a small round bubble in the note's color with its initial. Drag the bubble anywhere and click it to open the note there. Bubbles stay bubbles after a restart.
+- **Dark notes.** Three dark colors with light text: Deep teal, Midnight, and Graphite.
+- **Trash.** Deleting a note moves it to the trash, with Undo in the message that appears. **Trash** in the Notes Manager restores notes or deletes them for good, and notes left there for 30 days are deleted. Deleting a workspace moves its notes to the trash instead of deleting them.
+- **Daily backups.** The app copies the notes file into a `backups` folder once a day (checked at startup and every hour) and keeps the 10 newest copies. **Settings → Backups** makes a backup on demand and restores one; a restore saves the current notes as a backup first and can be undone.
+- **Notes Manager redesign.** A board of cards in each note's color with a formatted preview, or a compact list. Light, dark, or system theme. A ⋯ menu and a right-click menu on every note for showing, hiding, renaming, tags, color, moving, duplicating, exporting, and the trash. Rename in place by double-clicking a title or pressing `F2`. Counts on the All, On screen, and Hidden filters. Keyboard control: `/` to search, arrow keys, `Enter`, `Space`, `F2`, `Delete`, and `Ctrl/⌘+N`.
+- **Settings page.** Preferences and keyboard shortcuts moved from dialogs to one page in the Notes Manager with Appearance, New notes, Privacy, Shortcuts, Backups, Data, and About sections. Changes are saved as you make them.
+- **Shortcut scope.** Each global shortcut can work **Everywhere** or only **In Ghost Notetaker** windows, which leaves the key combination free for other apps.
+- **Talking points** template.
+- Tests for all of the above: unit tests for the trash, backups, images, and Markdown; end-to-end tests that paste and drop images, collapse, drag, and reopen bubbles, use the trash and Undo, restore backups, switch themes and layouts, change shortcut scopes, and drive the Notes Manager from the keyboard. On Linux, X11 tests use real mouse input to drag bubbles and to check that a note shows its formatted view when another window is clicked. The packaged-app smoke test now also pastes an image and checks that it is shown.
+
+### Changed
+
+- New color palette. The light colors are softer, and the notes that used Teal, Indigo, or Slate become the new dark colors. New installs create notes in Butter (yellow) instead of Mist.
+- The eye button turns reading mode on and off: a note in reading mode stays formatted even when you click it. The shortcut formerly called "Toggle Markdown preview" is now "Toggle reading mode".
+- New notes open in the editor, ready for typing. The welcome note opens formatted and explains clicking to edit and bubbles.
+- The tray menu's **Preferences…** item is now **Settings…**. Opening a note from the tray's recent notes expands it if it is a bubble.
+
+### Fixed
+
+- A note's shadow was cut off at the edge of its window, which drew a faint rectangle around notes, most visibly on dark backgrounds.
+
 ## [1.4.0] - 2026-10-04
 
 The first published release. Versions 1.0 to 1.3 were never released as builds.

@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, nativeTheme } = require('electron');
 const { applyContentProtection, isMac } = require('./platform');
 
 class ManagerWindowController {
@@ -28,7 +28,7 @@ class ManagerWindowController {
       minHeight: 500,
       show: false,
       title: 'Ghost Notetaker — Notes Manager',
-      backgroundColor: '#12141c',
+      backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1017' : '#f5f5f9',
       autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, '..', 'renderer', 'manager', 'preload.js'),
@@ -49,7 +49,9 @@ class ManagerWindowController {
     }
 
     applyContentProtection(win, this.isContentProtected());
-    win.loadFile(path.join(__dirname, '..', 'renderer', 'manager', 'manager.html'));
+    win.loadFile(path.join(__dirname, '..', 'renderer', 'manager', 'manager.html'), {
+      query: { theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light' }
+    });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', (event) => event.preventDefault());
     win.webContents.on('did-finish-load', () => {

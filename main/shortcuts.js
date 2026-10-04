@@ -10,10 +10,11 @@ const {
 } = require('./accelerator');
 
 class ShortcutController {
-  constructor({ getBindings, onAction }) {
+  constructor({ getBindings, getScopes, onAction }) {
     this.getBindings = getBindings;
+    this.getScopes = getScopes || (() => ({}));
     this.onAction = onAction;
-    /** @type {Record<string, 'active' | 'unavailable' | 'duplicate' | 'invalid' | 'off' | 'local'>} */
+    /** @type {Record<string, 'active' | 'app' | 'unavailable' | 'duplicate' | 'invalid' | 'off' | 'local'>} */
     this._status = {};
     this._paused = false;
   }
@@ -30,7 +31,13 @@ class ShortcutController {
     return { ...defaultShortcuts(), ...this.getBindings() };
   }
 
-  /** Every action with its binding, display label, and registration status. */
+  /** 'global' (system-wide) or 'app' (only while a Ghost Notetaker window is focused). */
+  _scopeOf(def) {
+    if (def.scope !== 'global') return 'app';
+    return this.getScopes()[def.id] === 'app' ? 'app' : 'global';
+  }
+
+  /** Every action with its binding, display label, scope, and registration status. */
   listDefinitions() {
     const bindings = this._bindings();
     return SHORTCUT_ACTIONS.map((a) => {
@@ -40,6 +47,8 @@ class ShortcutController {
         accelerator,
         display: formatAccelerator(accelerator),
         defaultAccelerator: defaultShortcuts()[a.id],
+        canBeGlobal: a.scope === 'global',
+        effectiveScope: this._scopeOf(a),
         status: this._status[a.id] || (a.scope === 'local' ? 'local' : 'off')
       };
     });
@@ -69,6 +78,10 @@ class ShortcutController {
       owner.set(accel, def.id);
       if (def.scope !== 'global') {
         status[def.id] = 'local';
+        continue;
+      }
+      if (this._scopeOf(def) === 'app') {
+        status[def.id] = 'app';
         continue;
       }
       let ok = false;

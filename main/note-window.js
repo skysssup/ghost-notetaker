@@ -7,12 +7,17 @@ const {
   applyAlwaysOnTop,
   applyContentProtection,
   applyClickThrough,
-  isWin
+  isWin,
+  isMac
 } = require('./platform');
 const { clampBoundsToDisplays } = require('./display');
 
 const FLUSH_SCRIPT =
   'typeof window.__ghostFlushPending === "function" ? window.__ghostFlushPending() : ({ ok: true })';
+
+/** Window size of a note collapsed into a bubble. */
+const BUBBLE_SIZE = 64;
+const NOTE_MIN = { width: 220, height: 180 };
 
 class NoteWindowController {
   constructor({ store, onChanged, attachShortcuts }) {
@@ -36,13 +41,19 @@ class NoteWindowController {
     return this.store.getSettings().contentProtection !== false;
   }
 
-  _boundsPatch(win) {
-    const bounds = win.getBounds();
-    const display = screen.getDisplayMatching(bounds);
+  /**
+   * Bounds to save for a note window. A collapsed note keeps its expanded size;
+   * only the bubble's position is recorded.
+   */
+  _boundsPatch(win, note) {
+    const live = win.getBounds();
+    const bounds = note && note.collapsed ? { ...note.bounds, x: live.x, y: live.y } : live;
+    const display = screen.getDisplayMatching(live);
     return { bounds, displayId: display ? display.id : null };
   }
 
-  async open(noteId) {
+  /** Open (or focus) a note window. `edit` starts it in the editor with the caret ready. */
+  async open(noteId, { edit = false } = {}) {
     const existing = this.windows.get(noteId);
     if (existing && !existing.isDestroyed()) {
       applyContentProtection(existing, this._contentProtectionEnabled());
@@ -70,9 +81,16 @@ class NoteWindowController {
     const opts = noteWindowOptions({
       x: clamped.x,
       y: clamped.y,
-      width: clamped.width,
-      height: clamped.height
+      width: note.collapsed ? BUBBLE_SIZE : clamped.width,
+      height: note.collapsed ? BUBBLE_SIZE : clamped.height
     });
+    if (note.collapsed) {
+      opts.minWidth = BUBBLE_SIZE;
+      opts.minHeight = BUBBLE_SIZE;
+      opts.resizable = false;
+      // The macOS blur would fill the whole square window behind the round bubble.
+      delete opts.vibrancy;
+    }
     opts.webPreferences.preload = path.join(__dirname, '..', 'renderer', 'note', 'preload.js');
 
     const win = new BrowserWindow(opts);
@@ -82,7 +100,7 @@ class NoteWindowController {
     applyAlwaysOnTop(win, note.pinned);
 
     win.loadFile(path.join(__dirname, '..', 'renderer', 'note', 'note.html'), {
-      query: { id: noteId }
+      query: edit ? { id: noteId, edit: '1' } : { id: noteId }
     });
 
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -114,7 +132,7 @@ class NoteWindowController {
     const persistBounds = () => {
       clearTimeout(boundsTimer);
       boundsTimer = setTimeout(() => {
-        if (!win.isDestroyed()) this.store.updateNote(noteId, this._boundsPatch(win));
+        if (!win.isDestroyed()) this.store.updateNote(noteId, this._boundsPatch(win, this.store.getNote(noteId)));
       }, 300);
     };
     win.on('move', persistBounds);
@@ -173,7 +191,7 @@ class NoteWindowController {
     const flushed = await this.flushWindow(win);
     if (!flushed.ok) return { id: noteId, ok: false, message: flushed.message };
     if (win.isDestroyed()) return { id: noteId, ok: true };
-    this.store.updateNote(noteId, { visible: false, ...this._boundsPatch(win) });
+    this.store.updateNote(noteId, { visible: false, ...this._boundsPatch(win, this.store.getNote(noteId)) });
     this.windows.delete(noteId);
     win.destroy();
     this.onChanged();
@@ -196,7 +214,9 @@ class NoteWindowController {
   /** Destroy every window; with persistBounds, record final positions first (quit). */
   destroyAll({ persistBounds = false } = {}) {
     for (const [id, win] of Array.from(this.windows.entries())) {
-      if (persistBounds && !win.isDestroyed()) this.store.updateNote(id, this._boundsPatch(win));
+      if (persistBounds && !win.isDestroyed()) {
+        this.store.updateNote(id, this._boundsPatch(win, this.store.getNote(id)));
+      }
       this.closeAndDestroy(id);
     }
   }
@@ -264,7 +284,42 @@ class NoteWindowController {
 
   _syncClickThrough(win, note) {
     const global = this.store.getSettings().globalClickThrough;
-    applyClickThrough(win, global || note.clickThrough, true);
+    // A bubble must stay clickable so the note can be expanded again.
+    applyClickThrough(win, !note.collapsed && (global || note.clickThrough), true);
+  }
+
+  /** Shrink a note to a draggable bubble or expand it back at the same place. */
+  setCollapsed(noteId, collapsed) {
+    const win = this.windows.get(noteId);
+    const note = this.store.getNote(noteId);
+    if (!note || !win || win.isDestroyed() || note.collapsed === collapsed) return note;
+    const live = win.getBounds();
+    if (collapsed) {
+      this.store.updateNote(noteId, { collapsed: true, ...this._boundsPatch(win, note) });
+      win.setResizable(false);
+      if (isMac()) win.setVibrancy(null);
+      win.setMinimumSize(BUBBLE_SIZE, BUBBLE_SIZE);
+      win.setBounds({ x: live.x, y: live.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE });
+    } else {
+      const expanded = clampBoundsToDisplays({ ...note.bounds, x: live.x, y: live.y }, note.displayId);
+      const bounds = { x: expanded.x, y: expanded.y, width: expanded.width, height: expanded.height };
+      win.setMinimumSize(NOTE_MIN.width, NOTE_MIN.height);
+      win.setResizable(true);
+      if (isMac()) win.setVibrancy('under-window');
+      win.setBounds(bounds);
+      this.store.updateNote(noteId, { collapsed: false, bounds, displayId: expanded.displayId });
+    }
+    this.applyNoteAppearance(noteId);
+    this.onChanged();
+    return this.store.getNote(noteId);
+  }
+
+  /** Move a note window by a pointer delta (dragging a bubble). */
+  moveBy(noteId, dx, dy) {
+    const win = this.windows.get(noteId);
+    if (!win || win.isDestroyed()) return;
+    const [x, y] = win.getPosition();
+    win.setPosition(Math.round(x + dx), Math.round(y + dy));
   }
 
   setGlobalClickThrough(enabled) {
@@ -282,6 +337,13 @@ class NoteWindowController {
     return next;
   }
 
+  /** Send the same message to every open note window. */
+  broadcast(channel, payload) {
+    for (const win of this.windows.values()) {
+      if (!win.isDestroyed()) win.webContents.send(channel, payload);
+    }
+  }
+
   reapplyContentProtection() {
     const enabled = this._contentProtectionEnabled();
     for (const win of this.windows.values()) {
@@ -294,12 +356,14 @@ class NoteWindowController {
       if (win.isDestroyed()) continue;
       const note = this.store.getNote(id);
       if (!note) continue;
-      const clamped = clampBoundsToDisplays(win.getBounds(), note.displayId);
+      const live = win.getBounds();
+      const source = note.collapsed ? { ...note.bounds, x: live.x, y: live.y } : live;
+      const clamped = clampBoundsToDisplays(source, note.displayId);
       const bounds = { x: clamped.x, y: clamped.y, width: clamped.width, height: clamped.height };
-      win.setBounds(bounds);
+      win.setBounds(note.collapsed ? { x: bounds.x, y: bounds.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE } : bounds);
       this.store.updateNote(id, { bounds, displayId: clamped.displayId });
     }
   }
 }
 
-module.exports = { NoteWindowController };
+module.exports = { NoteWindowController, BUBBLE_SIZE };

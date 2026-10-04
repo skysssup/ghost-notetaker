@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: ghost-image:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ghost Note</title>
@@ -16,12 +16,18 @@
         <symbol id="i-grip" viewBox="0 0 16 16"><circle cx="5.5" cy="4" r="1.2" /><circle cx="10.5" cy="4" r="1.2" /><circle cx="5.5" cy="8" r="1.2" /><circle cx="10.5" cy="8" r="1.2" /><circle cx="5.5" cy="12" r="1.2" /><circle cx="10.5" cy="12" r="1.2" /></symbol>
         <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.4" /></symbol>
         <symbol id="i-edit" viewBox="0 0 16 16"><path d="M10.8 2.7l2.5 2.5-7.6 7.6-3.1.6.6-3.1 7.6-7.6Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></symbol>
-        <symbol id="i-pin" viewBox="0 0 16 16"><path d="M6 2h4l-.5 4 2.5 2.5V10H4V8.5L6.5 6 6 2Z M8 10v4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round" /></symbol>
         <symbol id="i-ghost" viewBox="0 0 16 16"><path d="M3.5 14V7a4.5 4.5 0 0 1 9 0v7l-1.5-1.2L9.5 14 8 12.8 6.5 14 5 12.8 3.5 14Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /><circle cx="6.3" cy="7" r=".9" /><circle cx="9.7" cy="7" r=".9" /></symbol>
+        <symbol id="i-collapse" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" fill="none" stroke="currentColor" stroke-width="1.4" /><path d="M5.4 8h5.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></symbol>
         <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" /><circle cx="12.5" cy="8" r="1.3" /></symbol>
         <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></symbol>
+        <symbol id="i-ghost-solid" viewBox="0 0 24 24"><path d="M5 21V10a7 7 0 0 1 14 0v11l-2.3-1.8L14.3 21 12 19.2 9.7 21l-2.4-1.8L5 21Z" /></symbol>
       </defs>
     </svg>
+
+    <button type="button" id="bubble" class="bubble" hidden aria-label="Expand note">
+      <span class="bubble-face"><svg><use href="#i-ghost-solid" /></svg><span id="bubbleInitial" class="bubble-initial"></span></span>
+    </button>
+
     <div id="shell" class="shell">
       <header id="chrome" class="chrome" aria-label="Note controls">
         <span class="grip" title="Drag to move" aria-hidden="true"><svg><use href="#i-grip" /></svg></span>
@@ -36,9 +42,9 @@
         />
         <span class="drag-spacer" aria-hidden="true"></span>
         <div class="chrome-buttons">
-          <button type="button" id="btnPreview" class="icon-btn" title="Markdown preview" aria-label="Markdown preview" aria-pressed="false"><svg><use href="#i-eye" /></svg></button>
-          <button type="button" id="btnPin" class="icon-btn" title="Keep on top" aria-label="Keep on top" aria-pressed="true"><svg><use href="#i-pin" /></svg></button>
+          <button type="button" id="btnPreview" class="icon-btn" title="Reading mode" aria-label="Reading mode" aria-pressed="false"><svg><use href="#i-eye" /></svg></button>
           <button type="button" id="btnGhost" class="icon-btn" title="Click-through" aria-label="Click-through" aria-pressed="false"><svg><use href="#i-ghost" /></svg></button>
+          <button type="button" id="btnCollapse" class="icon-btn" title="Collapse to a bubble" aria-label="Collapse to a bubble"><svg><use href="#i-collapse" /></svg></button>
           <button type="button" id="btnMore" class="icon-btn" title="Appearance and more" aria-label="Appearance and more" aria-haspopup="true" aria-expanded="false" aria-controls="morePanel"><svg><use href="#i-more" /></svg></button>
           <button type="button" id="btnHide" class="icon-btn danger" title="Hide note" aria-label="Hide note"><svg><use href="#i-close" /></svg></button>
         </div>
@@ -56,9 +62,10 @@
             <output id="fontSizeValue" for="fontSize">14px</output>
           </label>
           <div class="more-actions">
+            <button type="button" id="btnPin" class="pill-btn" aria-pressed="true">Keep on top</button>
             <button type="button" id="btnMono" class="pill-btn" aria-pressed="false">Monospace</button>
-            <button type="button" id="btnNew" class="pill-btn">New note</button>
           </div>
+          <button type="button" id="btnNew" class="pill-btn wide">New note</button>
         </div>
       </header>
 
@@ -74,6 +81,7 @@
         <button type="button" data-md="ol" title="Numbered list" aria-label="Numbered list">1.</button>
         <button type="button" data-md="task" title="Checklist" aria-label="Checklist">☐</button>
         <button type="button" data-md="quote" title="Quote" aria-label="Quote">“</button>
+        <button type="button" data-md="table" title="Table" aria-label="Insert table">▦</button>
         <button type="button" data-md="hr" title="Divider" aria-label="Divider">—</button>
       </div>
 
@@ -82,10 +90,10 @@
           id="editor"
           class="editor"
           spellcheck="true"
-          placeholder="Write in Markdown…"
+          placeholder="Write in Markdown… paste or drop an image to add it"
           aria-label="Note content"
         ></textarea>
-        <div id="preview" class="preview hidden" aria-live="polite" role="article" aria-label="Markdown preview"></div>
+        <div id="preview" class="preview hidden" aria-live="polite" role="article" aria-label="Formatted note" tabindex="0"></div>
       </main>
 
       <footer class="status">
@@ -102,7 +110,7 @@
           />
         </div>
         <span id="saveStatus" class="save-status" role="status" hidden></span>
-        <span id="modeLabel" class="mode-label">edit</span>
+        <span id="modeLabel" class="mode-label">editing</span>
       </footer>
     </div>
     <script src="markdown.js"></script>

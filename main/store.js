@@ -6,19 +6,20 @@ const crypto = require('crypto');
 
 const STORE_VERSION = 2;
 
+// `ink` is the text color that stays readable on the note color.
 const NOTE_COLORS = [
-  { id: 'mist', hex: '#c8d6e5', label: 'Mist' },
-  { id: 'lavender', hex: '#a29bfe', label: 'Lavender' },
-  { id: 'mint', hex: '#55efc4', label: 'Mint' },
-  { id: 'peach', hex: '#fdcb6e', label: 'Peach' },
-  { id: 'rose', hex: '#fd79a8', label: 'Rose' },
-  { id: 'sky', hex: '#74b9ff', label: 'Sky' },
-  { id: 'slate', hex: '#636e72', label: 'Slate' },
-  { id: 'ivory', hex: '#f5f6fa', label: 'Ivory' },
-  { id: 'amber', hex: '#f59e0b', label: 'Amber' },
-  { id: 'coral', hex: '#ff7675', label: 'Coral' },
-  { id: 'teal', hex: '#14b8a6', label: 'Teal' },
-  { id: 'indigo', hex: '#818cf8', label: 'Indigo' }
+  { id: 'amber', hex: '#ffe58a', label: 'Butter', ink: 'dark' },
+  { id: 'peach', hex: '#ffd2a1', label: 'Peach', ink: 'dark' },
+  { id: 'coral', hex: '#ffb4a6', label: 'Coral', ink: 'dark' },
+  { id: 'rose', hex: '#ffc4dc', label: 'Rose', ink: 'dark' },
+  { id: 'lavender', hex: '#d6c8ff', label: 'Lavender', ink: 'dark' },
+  { id: 'sky', hex: '#bcdcff', label: 'Sky', ink: 'dark' },
+  { id: 'mint', hex: '#b4f0d4', label: 'Mint', ink: 'dark' },
+  { id: 'mist', hex: '#dfe6ee', label: 'Mist', ink: 'dark' },
+  { id: 'ivory', hex: '#fbf8f0', label: 'Paper', ink: 'dark' },
+  { id: 'teal', hex: '#115e59', label: 'Deep teal', ink: 'light' },
+  { id: 'indigo', hex: '#312e81', label: 'Midnight', ink: 'light' },
+  { id: 'slate', hex: '#2b303b', label: 'Graphite', ink: 'light' }
 ];
 
 const TEMPLATES = {
@@ -113,6 +114,21 @@ const TEMPLATES = {
       '- '
     ].join('\n')
   },
+  talking: {
+    id: 'talking',
+    label: 'Talking points',
+    title: 'Talking points',
+    content: [
+      '# Talking points',
+      '',
+      '1. Start with the problem',
+      '2. Show the demo',
+      '3. Ask for the next step',
+      '',
+      '## Questions to expect',
+      '- '
+    ].join('\n')
+  },
   decision: {
     id: 'decision',
     label: 'Decision log',
@@ -134,6 +150,19 @@ const TEMPLATES = {
     ].join('\n')
   }
 };
+
+const THEMES = ['system', 'light', 'dark'];
+const MANAGER_VIEWS = ['board', 'list'];
+
+/** Per-shortcut override: 'app' keeps a binding inside the app instead of system-wide. */
+function normalizeScopes(scopes) {
+  const out = {};
+  if (!scopes || typeof scopes !== 'object' || Array.isArray(scopes)) return out;
+  for (const id of Object.keys(defaultShortcuts())) {
+    if (scopes[id] === 'app' || scopes[id] === 'global') out[id] = scopes[id];
+  }
+  return out;
+}
 
 function createId(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
@@ -204,11 +233,15 @@ function defaultSettings() {
     launchAtLogin: false,
     defaultOpacity: 0.88,
     defaultFontSize: 14,
-    defaultColor: 'mist',
+    defaultColor: 'amber',
     defaultMonospace: false,
     sortBy: 'updated',
     recentNoteIds: [],
-    shortcuts: defaultShortcuts()
+    shortcuts: defaultShortcuts(),
+    shortcutScopes: {},
+    theme: 'system',
+    managerView: 'board',
+    formattedWhenIdle: true
   };
 }
 
@@ -229,6 +262,10 @@ function defaultNoteBounds() {
 
 function isKnownColor(id) {
   return NOTE_COLORS.some((c) => c.id === id);
+}
+
+function isIsoDate(value) {
+  return typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
 }
 
 function createNoteRecord(partial = {}, settings = null) {
@@ -259,7 +296,9 @@ function createNoteRecord(partial = {}, settings = null) {
     pinned: partial.pinned !== false,
     clickThrough: Boolean(partial.clickThrough),
     previewMode: Boolean(partial.previewMode),
+    collapsed: Boolean(partial.collapsed),
     visible: partial.visible !== false,
+    trashedAt: isIsoDate(partial.trashedAt) ? partial.trashedAt : null,
     bounds: normalizeBounds(partial.bounds || defaultNoteBounds()),
     displayId: partial.displayId != null ? partial.displayId : null,
     createdAt: partial.createdAt || stamp,
@@ -337,6 +376,10 @@ function migrate(raw) {
   settings.sortBy = ['updated', 'created', 'title', 'color'].includes(settings.sortBy)
     ? settings.sortBy
     : 'updated';
+  settings.theme = THEMES.includes(settings.theme) ? settings.theme : 'system';
+  settings.managerView = MANAGER_VIEWS.includes(settings.managerView) ? settings.managerView : 'board';
+  settings.formattedWhenIdle = settings.formattedWhenIdle !== false;
+  settings.shortcutScopes = normalizeScopes(settings.shortcutScopes);
   if (!NOTE_COLORS.some((c) => c.id === settings.defaultColor)) {
     settings.defaultColor = 'mist';
   }
@@ -386,6 +429,34 @@ function sortNotes(notes, sortBy) {
 }
 
 const SAVE_RETRY_MS = 2000;
+const TRASH_DAYS = 30;
+const BACKUP_KEEP = 10;
+const BACKUP_NAME = /^ghost-notetaker-\d{4}-\d{2}-\d{2}(-\d{6})?\.json$/;
+const IMAGE_NAME = /^[a-f0-9]{16}\.(png|jpg|gif|webp)$/;
+const IMAGE_REF = /ghost-image:\/\/img\/([a-f0-9]{16}\.(?:png|jpg|gif|webp))/g;
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_GRACE_MS = 60 * 60 * 1000;
+const IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+
+/** Detect an image type from its first bytes; the file name never decides. */
+function imageType(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return null;
+  if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpg';
+  if (buffer.subarray(0, 4).toString('latin1') === 'GIF8') return 'gif';
+  if (buffer.subarray(0, 4).toString('latin1') === 'RIFF' && buffer.subarray(8, 12).toString('latin1') === 'WEBP') {
+    return 'webp';
+  }
+  return null;
+}
+
+function localStamp(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    day: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    time: `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+  };
+}
 
 class Store {
   /**
@@ -587,6 +658,15 @@ class Store {
     if (patch && patch.defaultColor && !NOTE_COLORS.some((c) => c.id === patch.defaultColor)) {
       next.defaultColor = this.state.settings.defaultColor;
     }
+    if (patch && patch.theme !== undefined && !THEMES.includes(patch.theme)) {
+      next.theme = this.state.settings.theme;
+    }
+    if (patch && patch.managerView !== undefined && !MANAGER_VIEWS.includes(patch.managerView)) {
+      next.managerView = this.state.settings.managerView;
+    }
+    if (patch && patch.shortcutScopes) {
+      next.shortcutScopes = normalizeScopes({ ...this.state.settings.shortcutScopes, ...patch.shortcutScopes });
+    }
     this.state.settings = next;
     this.saveDeferred();
     return this.state.settings;
@@ -604,7 +684,7 @@ class Store {
     const out = [];
     for (const id of ids) {
       const n = this.getNote(id);
-      if (n) out.push(n);
+      if (n && !n.trashedAt) out.push(n);
       if (out.length >= limit) break;
     }
     return out;
@@ -646,24 +726,37 @@ class Store {
     return ws;
   }
 
+  /** Delete a workspace; its notes move to the trash in the first remaining workspace. */
   deleteWorkspace(id) {
     if (this.state.workspaces.length <= 1) return false;
     const idx = this.state.workspaces.findIndex((w) => w.id === id);
     if (idx < 0) return false;
     this.state.workspaces.splice(idx, 1);
-    this.state.notes = this.state.notes.filter((n) => n.workspaceId !== id);
-    this.state.settings.recentNoteIds = (this.state.settings.recentNoteIds || []).filter((nid) =>
-      this.state.notes.some((n) => n.id === nid)
-    );
+    const fallback = this.state.workspaces[0].id;
+    const stamp = nowIso();
+    for (const note of this.state.notes) {
+      if (note.workspaceId !== id) continue;
+      note.workspaceId = fallback;
+      if (!note.trashedAt) note.trashedAt = stamp;
+      note.visible = false;
+    }
+    this._forgetRecent((nid) => !this.getNote(nid) || Boolean(this.getNote(nid).trashedAt));
     if (this.state.activeWorkspaceId === id) {
-      this.state.activeWorkspaceId = this.state.workspaces[0].id;
+      this.state.activeWorkspaceId = fallback;
     }
     this.saveDeferred();
     return true;
   }
 
+  _forgetRecent(shouldForget) {
+    this.state.settings.recentNoteIds = (this.state.settings.recentNoteIds || []).filter(
+      (nid) => !shouldForget(nid)
+    );
+  }
+
+  /** Notes outside the trash, or only trashed notes with `{ trashed: true }`. */
   listNotes(filter = {}) {
-    let notes = this.state.notes.slice();
+    let notes = this.state.notes.filter((n) => Boolean(n.trashedAt) === Boolean(filter.trashed));
     if (filter.workspaceId) {
       notes = notes.filter((n) => n.workspaceId === filter.workspaceId);
     }
@@ -692,7 +785,7 @@ class Store {
   allTags(workspaceId) {
     const set = new Set();
     for (const n of this.state.notes) {
-      if (workspaceId && n.workspaceId !== workspaceId) continue;
+      if (n.trashedAt || (workspaceId && n.workspaceId !== workspaceId)) continue;
       for (const t of n.tags) set.add(String(t).toLowerCase());
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
@@ -739,6 +832,7 @@ class Store {
       'pinned',
       'clickThrough',
       'previewMode',
+      'collapsed',
       'visible',
       'bounds',
       'displayId',
@@ -765,6 +859,7 @@ class Store {
         key === 'pinned' ||
         key === 'clickThrough' ||
         key === 'previewMode' ||
+        key === 'collapsed' ||
         key === 'visible'
       ) {
         note[key] = Boolean(patch[key]);
@@ -782,13 +877,55 @@ class Store {
     return note;
   }
 
+  /** Permanently remove a note. */
   deleteNote(id) {
     const idx = this.state.notes.findIndex((n) => n.id === id);
     if (idx < 0) return false;
     this.state.notes.splice(idx, 1);
-    this.state.settings.recentNoteIds = (this.state.settings.recentNoteIds || []).filter((x) => x !== id);
+    this._forgetRecent((nid) => nid === id);
     this.saveDeferred();
     return true;
+  }
+
+  /** Move a note to the trash. It stays recoverable until the trash is emptied or purged. */
+  trashNote(id) {
+    const note = this.getNote(id);
+    if (!note || note.trashedAt) return null;
+    note.trashedAt = nowIso();
+    note.visible = false;
+    this._forgetRecent((nid) => nid === id);
+    this.saveDeferred();
+    return note;
+  }
+
+  /** Bring a note back from the trash, into an existing workspace, still hidden. */
+  restoreNote(id) {
+    const note = this.getNote(id);
+    if (!note || !note.trashedAt) return null;
+    note.trashedAt = null;
+    if (!this.state.workspaces.some((w) => w.id === note.workspaceId)) {
+      note.workspaceId = this.state.activeWorkspaceId;
+    }
+    this.saveDeferred();
+    return note;
+  }
+
+  emptyTrash() {
+    const before = this.state.notes.length;
+    this.state.notes = this.state.notes.filter((n) => !n.trashedAt);
+    const removed = before - this.state.notes.length;
+    if (removed) this.saveDeferred();
+    return removed;
+  }
+
+  /** Permanently delete notes that have been in the trash longer than `days`. */
+  purgeTrash(days = TRASH_DAYS, now = Date.now()) {
+    const cutoff = now - days * 24 * 60 * 60 * 1000;
+    const before = this.state.notes.length;
+    this.state.notes = this.state.notes.filter((n) => !n.trashedAt || Date.parse(n.trashedAt) > cutoff);
+    const removed = before - this.state.notes.length;
+    if (removed) this.saveDeferred();
+    return removed;
   }
 
   hideNote(id) {
@@ -811,6 +948,11 @@ class Store {
   }
 
   exportAll() {
+    const images = {};
+    for (const name of this.referencedImages()) {
+      const file = this.imagePath(name);
+      if (file && fs.existsSync(file)) images[name] = fs.readFileSync(file).toString('base64');
+    }
     return {
       exportedAt: nowIso(),
       app: 'ghost-notetaker',
@@ -818,8 +960,125 @@ class Store {
       version: STORE_VERSION,
       workspaces: this.state.workspaces,
       notes: this.state.notes,
-      settings: this.state.settings
+      settings: this.state.settings,
+      images
     };
+  }
+
+  // ---------- backups ----------
+
+  get backupDir() {
+    return path.join(path.dirname(this.filePath), 'backups');
+  }
+
+  /** Newest first: [{ name, size, modifiedAt }]. */
+  listBackups() {
+    if (!fs.existsSync(this.backupDir)) return [];
+    return fs
+      .readdirSync(this.backupDir)
+      .filter((name) => BACKUP_NAME.test(name))
+      .map((name) => {
+        const stat = fs.statSync(path.join(this.backupDir, name));
+        return { name, size: stat.size, modifiedAt: stat.mtime.toISOString(), mtimeMs: stat.mtimeMs };
+      })
+      .sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name))
+      .map(({ mtimeMs, ...rest }) => rest);
+  }
+
+  /**
+   * Copy the notes file into backups/. Without `force`, at most one copy per
+   * calendar day is made; the newest `keep` copies are kept.
+   */
+  createBackup({ force = false, now = new Date(), keep = BACKUP_KEEP } = {}) {
+    if (this._blockSave || !fs.existsSync(this.filePath)) return null;
+    const { day, time } = localStamp(now);
+    const existing = this.listBackups();
+    if (!force && existing.some((b) => b.name.startsWith(`ghost-notetaker-${day}`))) return null;
+    fs.mkdirSync(this.backupDir, { recursive: true, mode: 0o700 });
+    const name = force ? `ghost-notetaker-${day}-${time}.json` : `ghost-notetaker-${day}.json`;
+    const target = path.join(this.backupDir, name);
+    fs.copyFileSync(this.filePath, target);
+    fs.chmodSync(target, 0o600);
+    for (const old of this.listBackups().slice(keep)) {
+      fs.rmSync(path.join(this.backupDir, old.name), { force: true });
+    }
+    return name;
+  }
+
+  readBackup(name) {
+    if (typeof name !== 'string' || !BACKUP_NAME.test(name)) throw new Error('Unknown backup');
+    const file = path.join(this.backupDir, name);
+    if (!fs.existsSync(file)) throw new Error('That backup no longer exists');
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
+
+  // ---------- images ----------
+
+  get imageDir() {
+    return path.join(path.dirname(this.filePath), 'images');
+  }
+
+  imagePath(name) {
+    return typeof name === 'string' && IMAGE_NAME.test(name) ? path.join(this.imageDir, name) : null;
+  }
+
+  /** Store an image file and return its name. Only PNG, JPEG, GIF, and WebP up to 10 MB. */
+  saveImage(buffer) {
+    const type = imageType(buffer);
+    if (!type) throw new Error('Only PNG, JPEG, GIF, and WebP images can be added');
+    if (buffer.length > IMAGE_MAX_BYTES) throw new Error('Images can be at most 10 MB');
+    fs.mkdirSync(this.imageDir, { recursive: true, mode: 0o700 });
+    const name = `${crypto.randomBytes(8).toString('hex')}.${type}`;
+    fs.writeFileSync(path.join(this.imageDir, name), buffer, { mode: 0o600, flag: 'wx' });
+    return name;
+  }
+
+  /** Names of images referenced by any note, including notes in the trash. */
+  referencedImages() {
+    const names = new Set();
+    for (const note of this.state.notes) {
+      for (const match of String(note.content).matchAll(IMAGE_REF)) names.add(match[1]);
+    }
+    return names;
+  }
+
+  /**
+   * Delete image files that no note and no backup refers to. Files newer than
+   * `minAgeMs` are kept, because a pasted image is stored a moment before the
+   * note text that refers to it is saved.
+   */
+  collectImageGarbage({ minAgeMs = IMAGE_GRACE_MS, now = Date.now() } = {}) {
+    if (!fs.existsSync(this.imageDir)) return 0;
+    const keep = this.referencedImages();
+    for (const backup of this.listBackups()) {
+      const text = fs.readFileSync(path.join(this.backupDir, backup.name), 'utf8');
+      for (const match of text.matchAll(IMAGE_REF)) keep.add(match[1]);
+    }
+    let removed = 0;
+    for (const name of fs.readdirSync(this.imageDir)) {
+      if (!IMAGE_NAME.test(name) || keep.has(name)) continue;
+      const file = path.join(this.imageDir, name);
+      if (now - fs.statSync(file).mtimeMs < minAgeMs) continue;
+      fs.rmSync(file, { force: true });
+      removed += 1;
+    }
+    return removed;
+  }
+
+  _importImages(images) {
+    if (images == null) return;
+    if (typeof images !== 'object' || Array.isArray(images)) throw new Error('Invalid images');
+    for (const [name, data] of Object.entries(images)) {
+      const file = this.imagePath(name);
+      if (!file || typeof data !== 'string') throw new Error('Invalid image in backup');
+      const buffer = Buffer.from(data, 'base64');
+      if (imageType(buffer) !== name.split('.').pop() || buffer.length > IMAGE_MAX_BYTES) {
+        throw new Error('Invalid image in backup');
+      }
+      if (fs.existsSync(file)) continue;
+      fs.mkdirSync(this.imageDir, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(file, buffer, { mode: 0o600 });
+    }
   }
 
   importAll(payload, mode = 'merge') {
@@ -830,6 +1089,7 @@ class Store {
     const previous = structuredClone(this.state);
     const wasDirty = this._dirty;
     try {
+      this._importImages(payload.images);
       const result = this._importAll(payload, mode);
       this.flush();
       return result;
@@ -971,16 +1231,24 @@ class Store {
     return note;
   }
 
+  /** The note as a standalone Markdown file; app images are embedded as data URIs. */
   noteToMarkdown(id) {
     const note = this.getNote(id);
     if (!note) return null;
     const tags = note.tags.length ? `\n\n<!-- tags: ${note.tags.join(', ')} -->` : '';
-    return `# ${note.title}\n\n${note.content}${tags}\n`;
+    const content = note.content.replace(IMAGE_REF, (ref, name) => {
+      const file = this.imagePath(name);
+      if (!file || !fs.existsSync(file)) return ref;
+      return `data:${IMAGE_MIME[name.split('.').pop()]};base64,${fs.readFileSync(file).toString('base64')}`;
+    });
+    return `# ${note.title}\n\n${content}${tags}\n`;
   }
 }
 
 module.exports = {
   Store,
+  IMAGE_MIME,
+  imageType,
   STORE_VERSION,
   NOTE_COLORS,
   TEMPLATES,

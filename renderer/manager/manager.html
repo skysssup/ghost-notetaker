@@ -4,22 +4,60 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data: ghost-image:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ghost Notetaker — Notes Manager</title>
     <link rel="stylesheet" href="manager.css" />
   </head>
   <body>
+    <svg class="icon-defs" aria-hidden="true">
+      <defs>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></symbol>
+        <symbol id="i-board" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.6" /><rect x="13" y="4" width="7" height="7" rx="1.6" /><rect x="4" y="13" width="7" height="7" rx="1.6" /><rect x="13" y="13" width="7" height="7" rx="1.6" /></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.8" cy="6" r=".9" /><circle cx="4.8" cy="12" r=".9" /><circle cx="4.8" cy="18" r=".9" /></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" /></symbol>
+        <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.1" /><circle cx="12" cy="12" r="1.1" /><circle cx="18.5" cy="12" r="1.1" /></symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10.2 11v5M13.8 11v5" /></symbol>
+        <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2.2" /><circle cx="9" cy="17" r="2.2" /></symbol>
+        <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2.4" /><path d="M7 10h.01M10.3 10h.01M13.7 10h.01M17 10h.01M8 14.2h8" /></symbol>
+        <symbol id="i-notes" viewBox="0 0 24 24"><path d="M6 4.5h9l3.5 3.5v11.5H6z" /><path d="M14.5 4.5V8.5h4M9 12h6M9 15.5h4" /></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="2.8" /></symbol>
+        <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M10 5.8c.6-.2 1.3-.3 2-.3 6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.6 7.6A16.6 16.6 0 0 0 2.5 12S6 18.5 12 18.5c1.7 0 3.2-.5 4.4-1.2M4 4l16 16" /><path d="M10 10a2.8 2.8 0 0 0 4 4" /></symbol>
+        <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.5 3.5H5a1.5 1.5 0 0 0-1.5 1.5v7.5l8.6 8.6a1.5 1.5 0 0 0 2.1 0l6.4-6.4a1.5 1.5 0 0 0 0-2.1Z" /><circle cx="8.2" cy="8.2" r="1.3" /></symbol>
+        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2h8A1.5 1.5 0 0 1 20.5 9v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z" /></symbol>
+        <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></symbol>
+        <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6M3.5 4.5V9H8" /><path d="M12 8v4.2l2.8 1.8" /></symbol>
+        <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4.5 9.5 9 5" /><path d="M4.5 9.5h10a5 5 0 0 1 0 10H12" /></symbol>
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" /></symbol>
+        <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15.5V4.5M7.5 9 12 4.5 16.5 9M5 19.5h14" /></symbol>
+        <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.6" /><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" /></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10Z" /></symbol>
+        <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="11.5" rx="1.8" /><path d="M9 20h6M12 16v4" /></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4.5 19.5h4l10-10a2.1 2.1 0 0 0-4-4l-10 10Z" /><path d="m13.5 6.5 4 4" /></symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="1.8" /><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5" /></symbol>
+        <symbol id="i-export" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 18V8a1.5 1.5 0 0 1 1.5-1.5H10" /></symbol>
+        <symbol id="i-move" viewBox="0 0 24 24"><path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2h8A1.5 1.5 0 0 1 20.5 9v8.5A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5Z" /><path d="M10 13.2h5M13 11l2 2.2-2 2.2" /></symbol>
+        <symbol id="i-ghost" viewBox="0 0 24 24"><path d="M5.5 20.5V11a6.5 6.5 0 0 1 13 0v9.5l-2.2-1.6-2.1 1.6-2.2-1.6-2.2 1.6-2.1-1.6Z" /><path d="M10 10.5h.01M14 10.5h.01" /></symbol>
+        <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5 19 6v5.5c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6Z" /></symbol>
+        <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8h.01" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5" /></symbol>
+        <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11" /></symbol>
+        <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.1 0 1.7-.8 1.7-1.7 0-1.3-1.2-1.6-1.2-2.7 0-.9.7-1.6 1.6-1.6h2.4a4 4 0 0 0 4-4c0-3.9-3.8-7-8.5-7Z" /><circle cx="7.8" cy="11" r=".9" /><circle cx="10.5" cy="7.6" r=".9" /><circle cx="14.6" cy="7.8" r=".9" /></symbol>
+        <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="2.5" /><path d="M5 6v12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6M5 12c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5" /></symbol>
+      </defs>
+    </svg>
+
     <div class="app">
-      <aside class="sidebar">
+      <aside class="sidebar" aria-label="Notes Manager navigation">
         <div class="brand">
           <span class="logo" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="M5 21V10a7 7 0 0 1 14 0v11l-2.3-1.8L14.3 21 12 19.2 9.7 21l-2.4-1.8L5 21Z" /><circle cx="9.5" cy="10" r="1.3" fill="#2a1b5e" /><circle cx="14.5" cy="10" r="1.3" fill="#2a1b5e" /></svg>
+            <svg viewBox="0 0 24 24"><path d="M5 21V10a7 7 0 0 1 14 0v11l-2.3-1.8L14.3 21 12 19.2 9.7 21l-2.4-1.8L5 21Z" /><circle cx="9.5" cy="10" r="1.3" /><circle cx="14.5" cy="10" r="1.3" /></svg>
           </span>
-          <div>
+          <div class="brand-text">
             <div class="brand-name">Ghost Notetaker</div>
-            <div class="brand-sub">Notes Manager</div>
+            <div class="brand-sub" id="brandSub">Notes Manager</div>
           </div>
         </div>
 
@@ -27,14 +65,14 @@
           <section class="side-section" aria-labelledby="wsHeading">
             <div class="side-header">
               <h2 id="wsHeading">Workspaces</h2>
-              <button type="button" id="btnNewWs" class="mini-btn" title="New workspace" aria-label="New workspace">+</button>
+              <button type="button" id="btnNewWs" class="mini-btn" title="New workspace" aria-label="New workspace"><svg class="ico"><use href="#i-plus" /></svg></button>
             </div>
             <ul id="wsList" class="side-list"></ul>
           </section>
 
           <section class="side-section" aria-labelledby="tagHeading">
             <div class="side-header"><h2 id="tagHeading">Tags</h2></div>
-            <ul id="tagList" class="side-list"></ul>
+            <ul id="tagList" class="side-list tag-cloud"></ul>
           </section>
 
           <section class="side-section" aria-labelledby="recentHeading">
@@ -43,73 +81,148 @@
           </section>
         </div>
 
-        <div class="side-footer">
-          <button type="button" id="btnSettings" class="text-btn">Preferences</button>
-          <button type="button" id="btnShortcuts" class="text-btn">Keyboard shortcuts</button>
-          <button type="button" id="btnExport" class="text-btn">Export all notes…</button>
-          <button type="button" id="btnImport" class="text-btn">Import backup…</button>
-        </div>
+        <nav class="side-footer" aria-label="More">
+          <button type="button" id="btnTrash" class="nav-btn">
+            <svg class="ico"><use href="#i-trash" /></svg><span>Trash</span><span id="trashCount" class="count"></span>
+          </button>
+          <button type="button" id="btnSettings" class="nav-btn">
+            <svg class="ico"><use href="#i-settings" /></svg><span>Settings</span>
+          </button>
+          <button type="button" id="btnShortcuts" class="nav-btn">
+            <svg class="ico"><use href="#i-keyboard" /></svg><span>Keyboard shortcuts</span>
+          </button>
+        </nav>
       </aside>
 
       <main class="main">
         <div id="saveBanner" class="save-banner" role="alert" hidden></div>
-        <header class="toolbar">
-          <div class="search-wrap">
-            <input id="search" type="search" placeholder="Search titles, text, and tags" aria-label="Search notes" autofocus />
-          </div>
-          <div class="toolbar-actions">
-            <select id="visibilityFilter" title="Show" aria-label="Filter by visibility">
-              <option value="all">All notes</option>
-              <option value="open">Open</option>
-              <option value="hidden">Hidden</option>
-            </select>
-            <select id="sortBy" title="Sort" aria-label="Sort notes">
-              <option value="updated">Last edited</option>
-              <option value="created">Created</option>
-              <option value="title">Title</option>
-              <option value="color">Color</option>
-            </select>
-            <select id="templateSelect" title="Template for new note" aria-label="Template for new note">
-              <option value="blank">Blank note</option>
-            </select>
-            <button type="button" id="btnNewNote" class="primary-btn">New note</button>
-          </div>
-        </header>
 
-        <div class="bulk-bar">
-          <label class="bulk-check">
-            <input type="checkbox" id="selectAll" />
-            <span>Select all</span>
-          </label>
-          <div class="bulk-actions">
+        <section id="notesView" class="view" aria-labelledby="viewTitle">
+          <header class="toolbar">
+            <div class="search-wrap">
+              <svg class="ico"><use href="#i-search" /></svg>
+              <input id="search" type="search" placeholder="Search titles, text, and tags" aria-label="Search notes" autocomplete="off" />
+              <kbd id="searchHint" class="search-hint" aria-hidden="true">/</kbd>
+            </div>
+            <div class="seg" role="group" aria-label="Layout">
+              <button type="button" id="btnBoard" class="seg-btn" aria-pressed="true" title="Board"><svg class="ico"><use href="#i-board" /></svg><span>Board</span></button>
+              <button type="button" id="btnList" class="seg-btn" aria-pressed="false" title="List"><svg class="ico"><use href="#i-list" /></svg><span>List</span></button>
+            </div>
+            <label class="select-wrap" title="Sort notes">
+              <span class="sr-only">Sort notes</span>
+              <select id="sortBy" aria-label="Sort notes">
+                <option value="updated">Last edited</option>
+                <option value="created">Created</option>
+                <option value="title">Title</option>
+                <option value="color">Color</option>
+              </select>
+              <svg class="ico"><use href="#i-chevron" /></svg>
+            </label>
+            <div class="split">
+              <button type="button" id="btnNewNote" class="primary-btn"><svg class="ico"><use href="#i-plus" /></svg><span>New note</span></button>
+              <button type="button" id="btnTemplates" class="primary-btn split-more" aria-haspopup="menu" aria-expanded="false" aria-label="New note from a template" title="New note from a template"><svg class="ico"><use href="#i-chevron" /></svg></button>
+            </div>
+          </header>
+
+          <div class="view-head">
+            <div class="view-titles">
+              <h1 id="viewTitle">Notes</h1>
+              <p id="viewSub" class="view-sub"></p>
+            </div>
+            <div class="seg filter-seg" role="group" aria-label="Show notes">
+              <button type="button" class="seg-btn" data-visibility="all" aria-pressed="true">All <span class="seg-count" id="countAll"></span></button>
+              <button type="button" class="seg-btn" data-visibility="open" aria-pressed="false">On screen <span class="seg-count" id="countOpen"></span></button>
+              <button type="button" class="seg-btn" data-visibility="hidden" aria-pressed="false">Hidden <span class="seg-count" id="countHidden"></span></button>
+            </div>
+          </div>
+
+          <div id="filterChips" class="filter-chips" hidden></div>
+
+          <div id="bulkBar" class="bulk-bar">
+            <label class="bulk-check">
+              <input type="checkbox" id="selectAll" />
+              <span>Select all</span>
+            </label>
             <span id="selCount" class="sel-count" aria-live="polite"></span>
-            <button type="button" id="btnBulkShow" class="ghost-btn" disabled>Show selected</button>
-            <button type="button" id="btnBulkHide" class="ghost-btn" disabled>Hide selected</button>
+            <div class="bulk-actions">
+              <button type="button" id="btnBulkShow" class="ghost-btn" disabled><svg class="ico"><use href="#i-eye" /></svg>Show</button>
+              <button type="button" id="btnBulkHide" class="ghost-btn" disabled><svg class="ico"><use href="#i-eye-off" /></svg>Hide</button>
+              <button type="button" id="btnBulkTrash" class="ghost-btn danger" disabled><svg class="ico"><use href="#i-trash" /></svg>Move to trash</button>
+            </div>
           </div>
-        </div>
 
-        <div id="noteList" class="note-list" role="list" aria-label="Notes"></div>
-        <div id="empty" class="empty hidden" role="status">
-          <h2 id="emptyTitle">No notes here yet</h2>
-          <p id="emptyText">Create a note or pick a template to get started.</p>
-          <button type="button" id="btnEmptyNew" class="primary-btn">New note</button>
-        </div>
+          <div class="scroller" id="notesScroller">
+            <div id="noteList" class="note-list board" role="list" aria-label="Notes"></div>
+            <div id="empty" class="empty hidden" role="status">
+              <div class="empty-art" aria-hidden="true"><svg class="ico"><use href="#i-ghost" /></svg></div>
+              <h2 id="emptyTitle">No notes here yet</h2>
+              <p id="emptyText">Create a note or pick a template to get started.</p>
+              <button type="button" id="btnEmptyNew" class="primary-btn"><svg class="ico"><use href="#i-plus" /></svg><span>New note</span></button>
+            </div>
+          </div>
+        </section>
+
+        <section id="trashView" class="view" aria-labelledby="trashTitle" hidden>
+          <div class="view-head page-head">
+            <div class="view-titles">
+              <h1 id="trashTitle">Trash</h1>
+              <p class="view-sub">Notes stay here for 30 days, then they are deleted for good.</p>
+            </div>
+            <button type="button" id="btnEmptyTrash" class="danger-btn"><svg class="ico"><use href="#i-trash" /></svg>Empty trash</button>
+          </div>
+          <div class="scroller">
+            <div id="trashList" class="note-list list trash" role="list" aria-label="Notes in the trash"></div>
+            <div id="trashEmpty" class="empty hidden" role="status">
+              <div class="empty-art" aria-hidden="true"><svg class="ico"><use href="#i-trash" /></svg></div>
+              <h2>The trash is empty</h2>
+              <p>Notes you move to the trash can be restored from here.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="settingsView" class="view" aria-labelledby="settingsTitle" hidden>
+          <div class="view-head page-head">
+            <div class="view-titles">
+              <h1 id="settingsTitle">Settings</h1>
+              <p class="view-sub">Changes are saved as you make them.</p>
+            </div>
+            <span id="settingsSaved" class="saved-pill" role="status" hidden><svg class="ico"><use href="#i-check" /></svg>Saved</span>
+          </div>
+          <nav class="settings-nav" aria-label="Settings sections">
+            <a href="#setAppearance">Appearance</a>
+            <a href="#setNotes">Notes</a>
+            <a href="#setPrivacy">Privacy</a>
+            <a href="#setShortcuts">Shortcuts</a>
+            <a href="#setBackups">Backups</a>
+            <a href="#setData">Data</a>
+            <a href="#setAbout">About</a>
+          </nav>
+          <div class="scroller settings-scroller" id="settingsScroller">
+            <div id="settingsBody" class="settings-body"></div>
+          </div>
+        </section>
       </main>
     </div>
 
-    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <div id="menu" class="menu hidden" role="menu" aria-label="Actions"></div>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite">
+      <span id="toastText"></span>
+      <button type="button" id="toastAction" class="toast-btn" hidden>Undo</button>
+    </div>
 
     <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-card" id="modalCard">
         <header class="modal-head">
           <h2 id="modalTitle">Dialog</h2>
-          <button type="button" id="modalClose" class="icon-btn" aria-label="Close dialog">✕</button>
+          <button type="button" id="modalClose" class="icon-btn" aria-label="Close dialog"><svg class="ico"><use href="#i-close" /></svg></button>
         </header>
         <div id="modalBody" class="modal-body"></div>
         <footer id="modalFooter" class="modal-footer"></footer>
       </div>
     </div>
 
+    <script src="../note/markdown.js"></script>
     <script src="manager.js"></script>
   </body>
 </html>

@@ -117,7 +117,7 @@ const SHORTCUT_ACTIONS = [
   { id: 'toggleManager', label: 'Open / hide Notes Manager', scope: 'global' },
   { id: 'hideShowAll', label: 'Hide / show all notes', scope: 'global' },
   { id: 'toggleClickThrough', label: 'Toggle click-through (all notes)', scope: 'global' },
-  { id: 'togglePreview', label: 'Toggle Markdown preview (focused note)', scope: 'local' },
+  { id: 'togglePreview', label: 'Toggle reading mode (focused note)', scope: 'local' },
   { id: 'quickCapture', label: 'Quick capture from clipboard', scope: 'global' },
   { id: 'recoveryNewNote', label: 'New note (backup binding)', scope: 'global' }
 ];

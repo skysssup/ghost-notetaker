@@ -2,7 +2,7 @@
 
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { renderMarkdown, toggleTaskAtLine } = require('../renderer/note/markdown');
+const { renderMarkdown, toggleTaskAtLine, lineOffset } = require('../renderer/note/markdown');
 
 describe('markdown', () => {
   it('renders headings and emphasis', () => {
@@ -72,5 +72,38 @@ describe('markdown', () => {
     assert.match(html, /<del>old<\/del>/);
     assert.match(html, /gone/);
     assert.match(html, /stay/);
+  });
+  it('renders tables with column alignment and escapes cell text', () => {
+    const html = renderMarkdown('| Step | Time |\n| :-- | --: |\n| Intro | 2 <b>min</b> |');
+    assert.match(html, /<table><thead><tr><th>Step<\/th><th style="text-align:right">Time<\/th><\/tr><\/thead>/);
+    assert.match(html, /<td>Intro<\/td><td style="text-align:right">2 &lt;b&gt;min&lt;\/b&gt;<\/td>/);
+  });
+
+  it('renders nested and numbered lists with their depth and start number', () => {
+    const html = renderMarkdown('- one\n  - two\n    - three\n\n3. third\n4. fourth');
+    assert.match(html, /<li data-line="0">one<\/li><li class="depth-1" data-line="1">two<\/li><li class="depth-2" data-line="2">three<\/li>/);
+    assert.match(html, /<ol start="3"><li data-line="4">third<\/li>/);
+  });
+
+  it('shows only images stored with the note; remote and file images stay links or text', () => {
+    const html = renderMarkdown(
+      '![shot](ghost-image://img/0123456789abcdef.png) ![remote](https://example.com/a.png) ![file](file:///etc/passwd)'
+    );
+    assert.match(html, /<img src="ghost-image:\/\/img\/0123456789abcdef\.png" alt="shot"/);
+    assert.equal((html.match(/<img /g) || []).length, 1);
+    assert.match(html, /<a href="https:\/\/example\.com\/a\.png"/);
+    assert.match(html, /!\[file\]\(file:\/\/\/etc\/passwd\)/);
+    const evil = renderMarkdown('![" onerror="alert(1)](ghost-image://img/0123456789abcdef.png)');
+    assert.match(evil, /alt="&quot; onerror=&quot;alert\(1\)"/);
+  });
+
+  it('marks each block with its source line so a click can place the caret there', () => {
+    const src = '# Title\n\nSome text\n\n- [ ] task';
+    const html = renderMarkdown(src);
+    assert.ok(html.indexOf('<!--L0-->') < html.indexOf('<h1>'));
+    assert.ok(html.includes('<!--L2--><p>'));
+    assert.ok(html.includes('<!--L4-->'));
+    assert.equal(lineOffset(src, 2), src.indexOf('Some text'));
+    assert.equal(lineOffset(src, 99), src.length);
   });
 });

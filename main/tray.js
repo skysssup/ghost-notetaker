@@ -84,7 +84,7 @@ function buildTrayMenu(api) {
       click: () => api.openManager()
     },
     {
-      label: 'Preferences…',
+      label: 'Settings…',
       click: () => api.openSettings()
     },
     { type: 'separator' },

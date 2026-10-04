@@ -241,7 +241,7 @@ describe('Store persistence', () => {
   it('createNoteRecord defaults', () => {
     const n = createNoteRecord({ workspaceId: 'ws' });
     assert.equal(n.pinned, true);
-    assert.equal(n.opacity, 0.88);
+    assert.equal(n.opacity, 1);
     assert.ok(n.bounds.width >= 200);
   });
 

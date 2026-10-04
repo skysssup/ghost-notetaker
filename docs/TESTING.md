@@ -1,6 +1,6 @@
 # What is tested
 
-This page lists Ghost Notetaker's features, how each one is checked, and the result for version 1.5.0. "CI" means the GitHub Actions workflow in `.github/workflows/build.yml`. It runs on Ubuntu 24.04, Windows Server 2025, macOS 15 on Apple silicon, and macOS 15 on Intel.
+This page lists Ghost Notetaker's features, how each one is checked, and the result for version 1.6.0. "CI" means the GitHub Actions workflow in `.github/workflows/build.yml`. It runs on Ubuntu 24.04, Windows Server 2025, macOS 15 on Apple silicon, and macOS 15 on Intel.
 
 ## Test suites
 
@@ -45,16 +45,19 @@ Playwright normally reports every page as focused. Tests that depend on real foc
 | Keyboard shortcuts | List with status; record a new binding; duplicates refused; clear; reset; Escape cancels; global hotkeys paused while recording; limiting a shortcut to Ghost Notetaker unregisters it globally | E2E; X11 test with real key events | Pass. The real-key tests run on Linux only |
 | Settings | Defaults for new notes are applied; options the OS doesn't support are disabled; the theme switches between light and dark | E2E | Pass, CI on all four |
 | Screen-capture flag | Notes and the Notes Manager report `isContentProtected()` as on by default, and off after it is turned off | E2E and the packaged smoke test | Pass on macOS (both) and Windows. On Linux the option is disabled |
-| No spellcheck download | A new Linux profile downloads no dictionary | E2E; `strace` showed no network connections at startup (1.4.0) | Pass on Linux |
+| No spellcheck download | A new Linux profile downloads no dictionary | E2E | Pass on Linux |
+| No network requests | The app opens no network connection by itself | `strace -f -e trace=network` on the packaged Linux build for 20 seconds from a new profile (welcome note, Notes Manager not opened): only local sockets (X11, D-Bus) and netlink; Chromium opened five IPv6 UDP sockets to probe for IPv6 and sent nothing on them | Pass on Linux (1.6.0). Fonts and icons are files inside the app |
 | Second launch | Starting the app again opens the Notes Manager in the running instance | Packaged smoke test | Pass on all four, using the installed builds |
 | Tray menu | The menu opens; **Settings…** and **Keyboard Shortcuts…** open the matching part of the Notes Manager | Real clicks on the tray icon in an Xfce StatusNotifier panel on Linux (1.5.0 build); every item was checked by hand for 1.4.0 | Pass on Linux. Not checked on macOS or Windows |
 | Packaging | Installers build; Windows installs and uninstalls silently; the macOS app passes `codesign --verify`; the Linux `.deb` installs with an XWayland launcher | CI | Pass |
+| Reduced motion | With the system's reduce-motion setting, collapsing to a bubble and switching between the formatted view and the editor happen instantly | Script on Linux with Playwright's `reducedMotion: 'reduce'` emulation: animation durations resolve to 0 ms and a collapse takes 57 ms instead of 292 ms | Pass on Linux (1.6.0) |
+| Visual checks | Text contrast meets WCAG: body text at least 4.5:1 and secondary text at least 3:1 on the canvas, sidebar, and surface colors in both themes; note text at least 7:1 on all twelve papers; no light-theme color left on a dark surface | A script reads the computed text and background colors of every visible text node in the running app: the Notes Manager list, board, menu, trash, settings, a dialog, and the toast in both themes, and a note on each paper. Lowest results: body text 4.5:1 or more everywhere, secondary and tertiary text (counts, timestamps, labels) 3.0:1 or more, note text 9.1:1 or more, and tags and other secondary note text 3.7:1 or more. Every screen was also screenshotted in both themes and checked by eye | Pass on Linux (1.6.0) |
 
 ## Not verified
 
 - Whether real screen-sharing or recording apps (Zoom, Teams, Meet, OBS, QuickTime, Snipping Tool) actually hide the notes. CI only checks that the protection flag is set.
 - First launch of a downloaded build, which goes through macOS Gatekeeper and Windows SmartScreen. CI builds the artifacts on the runner, so they are never quarantined.
 - Physical Mac and Windows machines, multiple monitors, and HiDPI scaling on Windows. The screenshots and animations were taken on Linux at 2× scale.
-- How bubbles look on macOS, where note windows use a translucent background (it is turned off for bubbles).
+- How notes, bubbles, and the Notes Manager look on macOS and Windows: the transparent margin and shadow around notes, the inset traffic lights and translucent sidebar on macOS, the caption buttons and Mica backdrop on Windows, and the system accent color were checked on Linux only (where none of the platform chrome applies) or not at all.
 - Wayland sessions, GNOME's tray, and the macOS menu-bar icon as it appears on screen.
 - Launch at login on macOS and Windows. Tests don't change the runners' login items.

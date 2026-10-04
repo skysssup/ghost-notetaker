@@ -32,6 +32,7 @@ const {
   hideDockIcon,
   isMac,
   capabilities,
+  accentColor,
   applyClickThrough,
   applyLaunchAtLogin,
   getLaunchAtLogin
@@ -287,6 +288,7 @@ function registerIpc() {
     platform: process.platform,
     version: app.getVersion(),
     capabilities: capabilities(),
+    accentColor: accentColor(),
     dataFile: storePath(),
     backupDir: store.backupDir,
     darkMode: nativeTheme.shouldUseDarkColors,
@@ -637,15 +639,11 @@ function welcomeNoteContent() {
   return [
     '# Welcome',
     '',
-    'This note floats above other windows. Hover it to show its controls and drag the top bar to move it.',
+    'Notes stay above other windows. Hover a note for its controls; drag the top bar to move it. Click the text to edit it, and click anywhere else to see it formatted again.',
     '',
-    '- **Click the text** to edit it. When you click elsewhere, the note shows formatted Markdown again.',
-    '- **–** shrinks the note to a small bubble. Click the bubble to open it again.',
-    `- **✕** hides the note. Find every note in the **Notes Manager**: tray icon${managerKey ? ` or ${managerKey}` : ''}.`,
-    '',
-    '- [ ] Move this note somewhere handy',
-    '- [ ] Paste a screenshot into a note',
-    '- [ ] Open the Notes Manager',
+    '- [ ] Collapse this note to a bubble with **–**, then click the bubble to open it',
+    '- [ ] Hide it with **×**. Hidden notes are kept, not deleted',
+    `- [ ] Open the Notes Manager${managerKey ? ` with ${managerKey}` : ''} or from the tray icon`,
     '',
     protection,
     ''
@@ -712,7 +710,11 @@ async function boot() {
   setInterval(housekeeping, 60 * 60 * 1000).unref();
 
   nativeTheme.themeSource = store.getSettings().theme;
-  nativeTheme.on('updated', () => refreshManagerAndTray());
+  nativeTheme.on('updated', () => {
+    if (notes) notes.broadcast('note:theme', { dark: nativeTheme.shouldUseDarkColors });
+    if (manager) manager.applyTheme();
+    refreshManagerAndTray();
+  });
   protocol.handle('ghost-image', (request) => {
     const url = new URL(request.url);
     const file = url.host === 'img' ? store.imagePath(decodeURIComponent(url.pathname.slice(1))) : null;
@@ -793,6 +795,8 @@ async function boot() {
     await createNote({
       templateId: 'blank',
       title: 'Ghost Notetaker',
+      color: 'ivory',
+      opacity: 1,
       content: welcomeNoteContent(),
       bounds: cursorNearbyBounds({ width: 400, height: 470 }),
       edit: false

@@ -69,7 +69,7 @@ describe('notes manager', () => {
     await waitForStore(ctx.dataFile, (s) => s.notes.some((n) => n.tags.join() === 'standup,team'), 'tags on disk');
     await manager.click('#tagList button:has-text("#standup")');
     await waitFor(async () => (await cardTitles(manager)).join() === 'Meeting notes', 'tag filter');
-    assert.deepEqual(await meeting.locator('.tag-chip span:first-child').allTextContents(), ['#standup', '#team']);
+    assert.deepEqual(await meeting.locator('.tag').allTextContents(), ['#standup', '#team']);
   });
 
   it('renames in place, duplicates, moves, and trashes notes with undo', async () => {
@@ -224,7 +224,7 @@ describe('notes manager', () => {
     await ctx.note.click('#btnGhost');
     await waitForStore(ctx.dataFile, (s) => s.notes[0]?.clickThrough === true, 'click-through on');
     const row = card(ctx.manager, 'Ghost Notetaker');
-    await row.locator('.pill.warn').click();
+    await row.locator('[data-clickthrough]').click();
     await waitForStore(ctx.dataFile, (s) => s.notes[0]?.clickThrough === false, 'click-through off');
     await waitFor(async () => (await ctx.note.getAttribute('#btnGhost', 'aria-pressed')) === 'false', 'note button updated');
   });
@@ -247,21 +247,21 @@ describe('notes manager', () => {
     await ctx.note.waitForSelector('#saveStatus[hidden]', { state: 'attached', timeout: 10000 });
     await ctx.manager.waitForSelector('#saveBanner[hidden]', { state: 'attached', timeout: 10000 });
   });
-  it('board and list views, and the choice is remembered', async () => {
+  it('list and board views, and the choice is remembered', async () => {
     const ctx = await start();
     const { manager, dataFile } = ctx;
-    assert.match(await manager.getAttribute('#noteList', 'class'), /\bboard\b/);
-    await manager.click('#btnList');
     assert.match(await manager.getAttribute('#noteList', 'class'), /\blist\b/);
-    assert.equal(await manager.getAttribute('#btnList', 'aria-pressed'), 'true');
-    await waitForStore(dataFile, (s) => s.settings.managerView === 'list', 'layout on disk');
+    await manager.click('#btnBoard');
+    assert.match(await manager.getAttribute('#noteList', 'class'), /\bboard\b/);
+    assert.equal(await manager.getAttribute('#btnBoard', 'aria-pressed'), 'true');
+    await waitForStore(dataFile, (s) => s.settings.managerView === 'board', 'layout on disk');
 
     await ctx.app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('manager.html')).close();
     });
     await waitFor(async () => !ctx.app.windows().some((w) => w.url().includes('manager.html')), 'manager closed');
     const again = await openManager(ctx.app);
-    assert.match(await again.getAttribute('#noteList', 'class'), /\blist\b/);
+    assert.match(await again.getAttribute('#noteList', 'class'), /\bboard\b/);
   });
 
   it('keyboard: arrows move between notes, F2 renames, Delete trashes, Enter opens', async () => {
@@ -274,7 +274,7 @@ describe('notes manager', () => {
     await manager.click('#search');
     await manager.keyboard.press('ArrowDown');
     const first = await focusedTitle();
-    await manager.keyboard.press('ArrowRight');
+    await manager.keyboard.press('ArrowDown');
     const second = await focusedTitle();
     assert.deepEqual([first, second].sort(), ['Ghost Notetaker', 'Todo list']);
 

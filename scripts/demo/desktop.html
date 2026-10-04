@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Q3 roadmap review (sample slide)</title>
+    <style>
+      /* A sample presentation slide the demo notes float over. Every size is in
+         --u, 1px at 1200 CSS px wide, so the slide scales with the window. */
+      :root {
+        --u: calc(100vw / 1200);
+        --ink: #1f2328;
+        --soft: #5b6470;
+        --faint: #98a0aa;
+        --rule: #e4e7eb;
+        --teal: #2f7d78;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #fbfbfa;
+        color: var(--ink);
+        font-family: 'Noto Sans', 'Segoe UI', system-ui, sans-serif;
+      }
+      .slide {
+        position: absolute;
+        inset: 0;
+        padding: calc(var(--u) * 44) calc(var(--u) * 64);
+        box-sizing: border-box;
+      }
+      .top {
+        display: flex;
+        justify-content: space-between;
+        color: var(--faint);
+        font-size: calc(var(--u) * 13);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: calc(var(--u) * 40) 0 0;
+        font-size: calc(var(--u) * 46);
+        font-weight: 600;
+        letter-spacing: -0.015em;
+      }
+      .sub {
+        margin: calc(var(--u) * 6) 0 0;
+        color: var(--soft);
+        font-size: calc(var(--u) * 20);
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: calc(var(--u) * 56);
+        margin-top: calc(var(--u) * 44);
+      }
+      h2 {
+        margin: 0 0 calc(var(--u) * 12);
+        padding-bottom: calc(var(--u) * 8);
+        border-bottom: 1px solid var(--rule);
+        color: var(--soft);
+        font-size: calc(var(--u) * 14);
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      ul,
+      ol {
+        margin: 0 0 calc(var(--u) * 30);
+        padding-left: calc(var(--u) * 22);
+        font-size: calc(var(--u) * 19);
+        line-height: 1.55;
+      }
+      li::marker {
+        color: var(--teal);
+      }
+      .lanes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+        border-left: 1px solid var(--rule);
+      }
+      .lane {
+        padding: 0 calc(var(--u) * 10);
+        border-right: 1px solid var(--rule);
+        color: var(--faint);
+        font-size: calc(var(--u) * 13);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .bars {
+        position: relative;
+        height: calc(var(--u) * 150);
+        margin-top: calc(var(--u) * 10);
+      }
+      .bar {
+        position: absolute;
+        height: calc(var(--u) * 30);
+        border-radius: calc(var(--u) * 4);
+        background: #e3efee;
+        color: #1d4f4b;
+        font-size: calc(var(--u) * 14);
+        line-height: calc(var(--u) * 30);
+        padding-left: calc(var(--u) * 10);
+        box-sizing: border-box;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .bar.strong {
+        background: var(--teal);
+        color: #fff;
+      }
+      .foot {
+        position: absolute;
+        left: calc(var(--u) * 64);
+        right: calc(var(--u) * 64);
+        bottom: calc(var(--u) * 30);
+        display: flex;
+        justify-content: space-between;
+        color: var(--faint);
+        font-size: calc(var(--u) * 12);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="slide">
+      <div class="top"><span>Kestrel · sample deck</span><span>Thu 9 Oct 2026 · 4 / 12</span></div>
+      <h1>Q3 roadmap review</h1>
+      <p class="sub">Field app for repair crews</p>
+      <div class="cols">
+        <div>
+          <h2>Where Q3 landed</h2>
+          <ul>
+            <li>Beta grew from 12 to 36 active crews</li>
+            <li>Offline job sheets shipped in 2.3</li>
+            <li>Admin SSO moved to November</li>
+          </ul>
+          <h2>Q4 bets</h2>
+          <ol>
+            <li>Offline maps for low-signal areas</li>
+            <li>SSO for fleet admins</li>
+          </ol>
+        </div>
+        <div>
+          <h2>Q4 plan</h2>
+          <div class="lanes">
+            <div class="lane">Oct</div>
+            <div class="lane">Nov</div>
+            <div class="lane">Dec</div>
+          </div>
+          <div class="bars">
+            <div class="bar strong" style="left: 0; width: 38%; top: 0">Beta to 40 crews</div>
+            <div class="bar" style="left: 22%; width: 52%; top: calc(var(--u) * 42)">Admin SSO</div>
+            <div class="bar" style="left: 45%; width: 55%; top: calc(var(--u) * 84)">Offline maps</div>
+          </div>
+        </div>
+      </div>
+      <div class="foot"><span>Sample slide made for the Ghost Notetaker demo. Kestrel and its numbers are fictional.</span><span>kestrel-q3-review</span></div>
+    </div>
+  </body>
+</html>

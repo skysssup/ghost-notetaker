@@ -146,12 +146,16 @@ describe('keyboard shortcuts and preferences', () => {
     const newNote = row(manager, /^New note$/);
     const before = await newNote.locator('.status').textContent();
 
-    await newNote.locator('select').selectOption('app');
+    const chooseScope = async (label) => {
+      await newNote.getByRole('button', { name: 'Where New note works' }).click();
+      await manager.locator('#menu .menu-item', { hasText: label }).click();
+    };
+    await chooseScope('In Ghost Notetaker');
     await waitForStore(dataFile, (s) => s.settings.shortcutScopes.newNote === 'app', 'scope on disk');
     await waitFor(async () => (await newNote.locator('.status').textContent()) === 'Only in Ghost Notetaker', 'status');
     assert.equal(await registered('CommandOrControl+Shift+N'), false);
 
-    await newNote.locator('select').selectOption('global');
+    await chooseScope('Everywhere');
     await waitForStore(dataFile, (s) => s.settings.shortcutScopes.newNote === 'global', 'scope back to everywhere');
     await waitFor(async () => (await newNote.locator('.status').textContent()) === before, 'status restored');
     if (before === 'Works everywhere') assert.equal(await registered('CommandOrControl+Shift+N'), true);
@@ -163,10 +167,10 @@ describe('keyboard shortcuts and preferences', () => {
     await manager.click('.theme-option[data-theme="light"]');
     await waitFor(async () => (await manager.getAttribute('html', 'data-theme')) === 'light', 'light');
     await waitForStore(dataFile, (s) => s.settings.theme === 'light', 'theme on disk');
-    const lightBg = await manager.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    const lightBg = await manager.evaluate(() => getComputedStyle(document.querySelector('.main')).backgroundColor);
     await manager.click('.theme-option[data-theme="dark"]');
     await waitFor(async () => (await manager.getAttribute('html', 'data-theme')) === 'dark', 'dark');
-    const darkBg = await manager.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    const darkBg = await manager.evaluate(() => getComputedStyle(document.querySelector('.main')).backgroundColor);
     assert.notEqual(lightBg, darkBg);
     assert.equal(await manager.getAttribute('.theme-option[data-theme="dark"]', 'aria-checked'), 'true');
   });

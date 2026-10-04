@@ -23,6 +23,7 @@
     btnGhost: $('btnGhost'),
     btnCollapse: $('btnCollapse'),
     btnMore: $('btnMore'),
+    btnMdMore: $('btnMdMore'),
     morePanel: $('morePanel'),
     palette: $('palette'),
     opacity: $('opacity'),
@@ -34,7 +35,6 @@
     tagChips: $('tagChips'),
     tagInput: $('tagInput'),
     saveStatus: $('saveStatus'),
-    modeLabel: $('modeLabel'),
     bubble: $('bubble'),
     bubbleInitial: $('bubbleInitial')
   };
@@ -52,12 +52,31 @@
   // Show formatted Markdown whenever the note is not being edited.
   let formattedWhenIdle = true;
   let editing = params.get('edit') === '1';
+  // The view on screen, so a change between views can be animated.
+  let shownView = null;
 
-  const colorOf = (id) => colors.find((x) => x.id === id) || { hex: '#dfe6ee', ink: 'dark' };
+  const BUBBLE = 56;
+  const colorOf = (id) => colors.find((x) => x.id === id) || { hex: '#e0eaee', ink: 'dark' };
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const morphMs = () => (reducedMotion.matches ? 0 : 240);
+  // Panels follow the app theme (System, Light, or Dark) chosen in Settings.
+  const applyTheme = (dark) => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  };
 
+  /** Switches use aria-checked, toggle buttons aria-pressed. */
   function setPressed(btn, on) {
-    btn.classList.toggle('active', on);
-    btn.setAttribute('aria-pressed', String(on));
+    btn.setAttribute(btn.getAttribute('role') === 'switch' ? 'aria-checked' : 'aria-pressed', String(on));
+  }
+
+  function icon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'ico');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.appendChild(use);
+    return svg;
   }
 
   function setValuePreservingSelection(input, value) {
@@ -76,15 +95,12 @@
     (note.tags || []).forEach((tag) => {
       const chip = document.createElement('button');
       chip.type = 'button';
-      chip.className = 'tag-chip';
+      chip.className = 'tag';
       chip.title = `Remove tag #${tag}`;
+      chip.setAttribute('aria-label', `Remove tag ${tag}`);
       const label = document.createElement('span');
       label.textContent = `#${tag}`;
-      const x = document.createElement('span');
-      x.className = 'tag-x';
-      x.setAttribute('aria-hidden', 'true');
-      x.textContent = '×';
-      chip.append(label, x);
+      chip.append(label, icon('x'));
       chip.addEventListener('click', () => {
         queueSave({ tags: (note.tags || []).filter((t) => t !== tag) });
         renderTags();
@@ -95,7 +111,7 @@
 
   function applyStyle() {
     const color = colorOf(note.color);
-    const opacityPct = Math.round((note.opacity || 0.88) * 100);
+    const opacityPct = Math.round((note.opacity || 1) * 100);
     const fontSize = note.fontSize || 14;
     els.opacity.value = opacityPct;
     els.opacityValue.textContent = `${opacityPct}%`;
@@ -105,7 +121,7 @@
       el.style.setProperty('--note-tint', color.hex);
       el.classList.toggle('ink-light', color.ink === 'light');
     }
-    els.shell.style.setProperty('--opacity', String(note.opacity || 0.88));
+    els.shell.style.setProperty('--opacity', String(note.opacity || 1));
     els.shell.style.setProperty('--font-size', `${fontSize}px`);
     els.shell.classList.toggle('mono', Boolean(note.monospace));
     setPressed(els.btnMono, Boolean(note.monospace));
@@ -116,7 +132,8 @@
     }
     const initial = /[\p{L}\p{N}]/u.exec(note.title || '');
     els.bubbleInitial.textContent = initial ? initial[0].toUpperCase() : '';
-    els.bubble.title = `${note.title || 'Untitled'} — click to expand, drag to move`;
+    els.bubble.title = note.title || 'Untitled';
+    els.bubble.setAttribute('aria-label', `Expand ${note.title || 'Untitled'}`);
   }
 
   /** Which view the note shows right now. */
@@ -129,14 +146,25 @@
 
   function render() {
     const view = currentView();
+    // Expanding a bubble waits until the main process has made the window note-sized.
+    if (shownView === 'bubble' && view !== 'bubble' && innerWidth < BUBBLE * 2) {
+      addEventListener('resize', render, { once: true });
+      return;
+    }
+    const previous = shownView;
+    shownView = view;
     document.body.classList.toggle('collapsed', view === 'bubble');
-    els.bubble.hidden = view !== 'bubble';
     const showPreview = view === 'reading' || view === 'formatted';
+    if (previous && previous !== 'bubble' && view !== 'bubble' && showPreview !== els.editor.classList.contains('hidden')) {
+      crossfade(showPreview ? els.editor : els.preview, showPreview ? els.preview : els.editor);
+    }
+    if (previous === 'bubble' && view !== 'bubble') expandFromBubble();
+    else if (!els.bubble.classList.contains('appearing')) els.bubble.hidden = view !== 'bubble';
     els.editor.classList.toggle('hidden', showPreview);
     els.preview.classList.toggle('hidden', !showPreview);
     els.mdToolbar.classList.toggle('hidden', showPreview);
+    if (showPreview) setMdOverflow(false);
     els.shell.classList.toggle('reading', view === 'reading');
-    els.modeLabel.textContent = { reading: 'reading', formatted: 'click to edit', editing: 'editing' }[view] || '';
     setPressed(els.btnPreview, view === 'reading');
     const label = view === 'reading' ? 'Reading mode is on (click text does not edit)' : 'Reading mode';
     els.btnPreview.title = label;
@@ -162,6 +190,54 @@
 
   function renderPreview() {
     els.preview.innerHTML = md.renderMarkdown(els.editor.value);
+  }
+
+  /** Fade the formatted view and the editor into each other. */
+  function crossfade(outgoing, incoming) {
+    if (reducedMotion.matches) return;
+    const ghost = outgoing.cloneNode(true);
+    ghost.removeAttribute('id');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.tabIndex = -1;
+    ghost.classList.remove('fade-in');
+    ghost.classList.add('fade-out');
+    outgoing.after(ghost);
+    ghost.scrollTop = outgoing.scrollTop;
+    setTimeout(() => ghost.remove(), 200);
+    incoming.classList.remove('fade-in');
+    void incoming.offsetWidth;
+    incoming.classList.add('fade-in');
+  }
+
+  /** Scale factors that shrink the paper to the bubble at its top-left corner. */
+  function setBubbleScale() {
+    const { width, height } = els.shell.getBoundingClientRect();
+    els.shell.style.setProperty('--to-bubble-x', String(BUBBLE / width));
+    els.shell.style.setProperty('--to-bubble-y', String(BUBBLE / height));
+  }
+
+  async function collapseToBubble() {
+    setBubbleScale();
+    els.shell.classList.add('collapsing');
+    els.bubble.hidden = false;
+    els.bubble.classList.add('appearing');
+    await new Promise((resolve) => setTimeout(resolve, morphMs()));
+    const collapsed = await window.ghostNote.setCollapsed(noteId, true).catch(() => null);
+    if (collapsed && collapsed.collapsed) applyLocal(collapsed);
+    els.shell.classList.remove('collapsing');
+    els.bubble.classList.remove('appearing');
+    els.bubble.hidden = currentView() !== 'bubble';
+  }
+
+  function expandFromBubble() {
+    setBubbleScale();
+    els.shell.classList.add('expanding');
+    els.bubble.classList.add('leaving');
+    setTimeout(() => {
+      els.shell.classList.remove('expanding');
+      els.bubble.classList.remove('leaving');
+      els.bubble.hidden = currentView() !== 'bubble';
+    }, morphMs());
   }
 
   /** Source line for a click inside the formatted view. */
@@ -264,7 +340,6 @@
     els.saveStatus.hidden = !message;
     els.saveStatus.textContent = message;
     els.saveStatus.classList.toggle('info', !localSaveFailed && !diskSaveFailed);
-    els.shell.classList.toggle('has-status', Boolean(message));
   }
 
   function flash(message) {
@@ -298,7 +373,7 @@
       b.dataset.color = c.id;
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-label', c.label);
-      b.style.background = c.hex;
+      b.style.backgroundColor = c.hex;
       b.title = c.label;
       b.addEventListener('click', () => {
         queueSave({ color: c.id });
@@ -306,6 +381,11 @@
       });
       els.palette.appendChild(b);
     });
+  }
+
+  function setMdOverflow(open) {
+    els.mdToolbar.classList.toggle('overflow-open', open);
+    els.btnMdMore.setAttribute('aria-expanded', String(open));
   }
 
   function setMoreOpen(open) {
@@ -386,9 +466,13 @@
   els.mdToolbar.addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-md]');
     if (!btn || !note || currentView() !== 'editing') return;
+    setMdOverflow(false);
     const action = MD_ACTIONS[btn.getAttribute('data-md')];
     if (action) action();
   });
+
+  els.btnMdMore.addEventListener('click', () => setMdOverflow(!els.mdToolbar.classList.contains('overflow-open')));
+  addEventListener('resize', () => setMdOverflow(false));
 
   // ---------- images ----------
 
@@ -526,7 +610,7 @@
   els.btnCollapse.addEventListener('click', async () => {
     setMoreOpen(false);
     await flushNow();
-    window.ghostNote.setCollapsed(noteId, true);
+    await collapseToBubble();
   });
 
   els.btnMore.addEventListener('click', (e) => {
@@ -536,11 +620,15 @@
 
   document.addEventListener('click', (e) => {
     if (!els.morePanel.contains(e.target) && !els.btnMore.contains(e.target)) setMoreOpen(false);
+    if (!els.mdToolbar.contains(e.target)) setMdOverflow(false);
   });
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!els.morePanel.classList.contains('hidden')) {
+    if (els.mdToolbar.classList.contains('overflow-open')) {
+      setMdOverflow(false);
+      els.btnMdMore.focus();
+    } else if (!els.morePanel.classList.contains('hidden')) {
       setMoreOpen(false);
       els.btnMore.focus();
     } else if (editing && formattedWhenIdle && document.activeElement === els.editor) {
@@ -613,6 +701,8 @@
     if (note) render();
   });
 
+  window.ghostNote.onTheme((theme) => applyTheme(theme.dark));
+
   window.ghostNote.onSaveState((state) => {
     diskSaveFailed = !state.ok;
     renderSaveStatus();
@@ -635,6 +725,8 @@
 
   async function init() {
     const boot = await window.ghostNote.getBootstrap();
+    applyTheme(boot.darkMode);
+    if (boot.accentColor) document.documentElement.style.setProperty('--accent', boot.accentColor);
     colors = boot.colors || [];
     formattedWhenIdle = boot.settings.formattedWhenIdle !== false;
     buildPalette();

@@ -1,8 +1,42 @@
 'use strict';
 
+const os = require('os');
 const path = require('path');
 const { BrowserWindow, nativeTheme } = require('electron');
-const { applyContentProtection, isMac } = require('./platform');
+const { applyContentProtection, isMac, isWin } = require('./platform');
+
+/** Canvas and text colors from renderer/shared/tokens.css, for the parts of the window the OS draws. */
+const CHROME = {
+  light: { canvas: '#f8f6f4', text: '#1d1a15' },
+  dark: { canvas: '#121110', text: '#ebe7e2' }
+};
+const chromeColors = () => CHROME[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'];
+const isWindows11 = () => isWin() && Number(os.release().split('.')[2]) >= 22000;
+
+/**
+ * macOS: inset traffic lights over a translucent sidebar. Windows: the page
+ * draws the title bar under the system caption buttons. Linux keeps its frame.
+ */
+function platformChrome() {
+  const colors = chromeColors();
+  if (isMac()) {
+    return {
+      titleBarStyle: 'hiddenInset',
+      trafficLightPosition: { x: 14, y: 14 },
+      vibrancy: 'sidebar',
+      visualEffectState: 'followWindow',
+      backgroundColor: '#00000000'
+    };
+  }
+  if (isWin()) {
+    return {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { height: 40, color: colors.canvas, symbolColor: colors.text },
+      ...(isWindows11() ? { backgroundMaterial: 'mica' } : {})
+    };
+  }
+  return {};
+}
 
 class ManagerWindowController {
   constructor({ attachShortcuts, isContentProtected, onClosed }) {
@@ -22,14 +56,15 @@ class ManagerWindowController {
     }
 
     this.win = new BrowserWindow({
-      width: 1040,
-      height: 700,
-      minWidth: 760,
-      minHeight: 500,
+      width: 1120,
+      height: 720,
+      minWidth: 820,
+      minHeight: 520,
       show: false,
       title: 'Ghost Notetaker — Notes Manager',
-      backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f1017' : '#f5f5f9',
+      backgroundColor: chromeColors().canvas,
       autoHideMenuBar: true,
+      ...platformChrome(),
       webPreferences: {
         preload: path.join(__dirname, '..', 'renderer', 'manager', 'preload.js'),
         contextIsolation: true,
@@ -89,6 +124,14 @@ class ManagerWindowController {
 
   refresh() {
     this.send('manager:refresh');
+  }
+
+  /** Recolor what the OS draws (Windows caption buttons, the window background) after a theme change. */
+  applyTheme() {
+    if (!this.win || this.win.isDestroyed() || isMac()) return;
+    const colors = chromeColors();
+    this.win.setBackgroundColor(colors.canvas);
+    if (isWin()) this.win.setTitleBarOverlay({ color: colors.canvas, symbolColor: colors.text });
   }
 
   reapplyContentProtection() {

@@ -80,10 +80,11 @@ describe('desktop integration (X11)', { skip }, () => {
       const now = await noteBounds(ctx.app);
       return now.x >= b.x + 80 && now.y >= b.y + 60 ? now : null;
     }, 'window moved by the drag');
-    // The window manager settles the final position; what is on disk must match it.
+    // The window manager settles the final position; what is on disk must match it
+    // (saved bounds start 8px inside the window, where the paper's 8px margin begins).
     await waitForStore(
       ctx.dataFile,
-      (s) => s.notes[0]?.bounds.x === moved.x && s.notes[0]?.bounds.y === moved.y,
+      (s) => s.notes[0]?.bounds.x === moved.x + 8 && s.notes[0]?.bounds.y === moved.y + 8,
       'moved bounds on disk'
     );
   });
@@ -106,10 +107,11 @@ describe('desktop integration (X11)', { skip }, () => {
       return now.x >= b.x + 100 && now.y >= b.y + 60 ? now : null;
     }, 'bubble moved by the drag');
     assert.ok(moved.width < 100, 'a drag must not expand the bubble');
-    // While collapsed, the file keeps the full size at the new position.
+    // While collapsed, the file keeps the full size at the new position
+    // (saved bounds are 8px inside the window on each side).
     await waitForStore(
       ctx.dataFile,
-      (s) => s.notes[0]?.bounds.x === moved.x && s.notes[0]?.bounds.width === 360 && s.notes[0]?.collapsed,
+      (s) => s.notes[0]?.bounds.x === moved.x + 8 && s.notes[0]?.bounds.width === 344 && s.notes[0]?.collapsed,
       'bubble position on disk'
     );
 
@@ -164,7 +166,7 @@ describe('desktop integration (X11)', { skip }, () => {
     await new Promise((r) => setTimeout(r, 600));
     assert.equal(await ctx.note.evaluate(() => window.__downs), downs, 'click should pass through the note');
 
-    await manager.locator('.note-card .pill.warn').click();
+    await manager.locator('.note-card [data-clickthrough]').click();
     await waitForStore(ctx.dataFile, (s) => s.notes[0]?.clickThrough === false, 'click-through off');
     await new Promise((r) => setTimeout(r, 300));
     clickNoteBody();

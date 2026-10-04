@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.6.0] - 2026-10-04
+
+### Changed
+
+- **New look.** Notes are the only color. Each note is an opaque sheet of paper (the blur and sheen are gone), and the Notes Manager, menus, settings, and dialogs are near-monochrome and separated by hairlines instead of shadows. The interface uses the operating system's font. Note text uses iA Writer Quattro, and monospace notes and code use iA Writer Mono; both are bundled with the app. The icons come from one set (Lucide), and the ghost mark was redrawn on the same stroke.
+- **Paper colors.** The twelve colors were retuned as a set: the nine light ones share about the same lightness, and so do the three dark ones. Their ids, and the notes that use them, are unchanged. Coral is now called Blush, and Midnight is now Night.
+- **Opaque by default.** New installs create notes at 100% opacity. Existing notes and a saved default keep their opacity (**Settings → New notes → Opacity**). A note below 100% now shows what is behind it without blurring it.
+- **Accent color.** Focus rings, selected notes, and links use the system accent color on macOS and Windows, and blue on Linux.
+- **Note window.** The Markdown toolbar uses icons; on a note narrower than 320 px it shows the first six and puts the rest behind a ⋯ button. Tags are plain `#tag` text, and the add-tag field shows when you hover the note. The "click to edit" and "editing" label is gone. The appearance panel (⋯) follows the app's light or dark theme and has switches for Keep on top and Monospace. A bubble is a 56 px circle with the note's first letter. Collapsing a note to a bubble and opening it again are animated, and switching between the formatted view and the editor fades; both happen instantly when the system asks for reduced motion.
+- **Note windows** extend 16 px past the paper (32 px below) so the paper's shadow is not cut off. Saved positions keep their meaning, so notes stay where they were. The exception is a note pushed right against the edge of the screen on macOS or Linux: those systems keep the whole window on screen, so the note moves in by up to 8 px (24 px at the bottom edge) the first time it opens. On macOS, note windows no longer use a translucent background or the system window shadow.
+- **Notes Manager.** New installs open in the list view; a saved choice is kept. The board shows short and tall cards in columns, and a preview ends at the last paragraph, list item, or table row that fits. In the board, Up and Down move through a column and Left and Right move to the next one. Sort is a menu, and the layout and filter controls are segmented buttons. In the list, the strip above the notes names the columns and turns into the bulk actions while notes are selected. An active tag filter is shown under the workspace name with a **Show all** link.
+- **Settings** is one page of sections instead of cards. The theme is chosen with System, Light, and Dark buttons, text size has a stepper, and each shortcut's **Works** setting is a menu.
+- **Window chrome.** On macOS, the Notes Manager has inset traffic lights over a translucent sidebar. On Windows, the page draws the title bar under the system caption buttons, with the Mica backdrop on Windows 11. Linux keeps the window manager's title bar. The default size is 1120×720 and the minimum 820×520.
+- **Welcome note.** Shorter, on Paper at 100% opacity.
+- **App and tray icons.** A ghost outline on a sheet of Butter paper.
+- **README.** One animation and four screenshots, made with sample data by the scripts in `scripts/demo/`.
+
+### Fixed
+
+- At a note's minimum size, the appearance panel (⋯) was wider than the note and its left edge was cut off.
+- A long title in a note's top bar was cut off at a fixed width even when the note had room for it.
+
 ## [1.5.0] - 2026-10-04
 
 ### Added

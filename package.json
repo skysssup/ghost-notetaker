@@ -1,6 +1,6 @@
 {
   "name": "ghost-notetaker",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Always-on-top Markdown sticky notes for the desktop, stored in a local JSON file, with best-effort hiding from screen capture on macOS and Windows",
   "main": "main/main.js",
   "scripts": {
@@ -32,7 +32,8 @@
   "devDependencies": {
     "electron": "^42.11.10",
     "electron-builder": "^26.15.3",
-    "playwright": "^1.63.0"
+    "playwright": "^1.63.0",
+    "pngjs": "^7.0.0"
   },
   "build": {
     "appId": "com.ghostnotetaker.app",

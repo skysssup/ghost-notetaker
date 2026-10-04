@@ -9,6 +9,8 @@ const { app, BrowserWindow } = require('electron');
 const buildDir = path.join(__dirname, '..', 'build');
 const outputs = [
   { svg: 'icon.svg', png: 'icon.png', size: 1024 },
+  { svg: 'tray-icon.svg', png: 'tray-icon.png', size: 32 },
+  { svg: 'tray-icon.svg', png: 'tray-icon@2x.png', size: 64 },
   { svg: 'trayTemplate.svg', png: 'trayTemplate.png', size: 16 },
   { svg: 'trayTemplate.svg', png: 'trayTemplate@2x.png', size: 32 }
 ];

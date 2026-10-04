@@ -6,20 +6,21 @@ const crypto = require('crypto');
 
 const STORE_VERSION = 2;
 
-// `ink` is the text color that stays readable on the note color.
+// Paper colors. `ink` is the text color that reads on the paper. The ids are
+// stored in notes files and never change.
 const NOTE_COLORS = [
-  { id: 'amber', hex: '#ffe58a', label: 'Butter', ink: 'dark' },
-  { id: 'peach', hex: '#ffd2a1', label: 'Peach', ink: 'dark' },
-  { id: 'coral', hex: '#ffb4a6', label: 'Coral', ink: 'dark' },
-  { id: 'rose', hex: '#ffc4dc', label: 'Rose', ink: 'dark' },
-  { id: 'lavender', hex: '#d6c8ff', label: 'Lavender', ink: 'dark' },
-  { id: 'sky', hex: '#bcdcff', label: 'Sky', ink: 'dark' },
-  { id: 'mint', hex: '#b4f0d4', label: 'Mint', ink: 'dark' },
-  { id: 'mist', hex: '#dfe6ee', label: 'Mist', ink: 'dark' },
-  { id: 'ivory', hex: '#fbf8f0', label: 'Paper', ink: 'dark' },
-  { id: 'teal', hex: '#115e59', label: 'Deep teal', ink: 'light' },
-  { id: 'indigo', hex: '#312e81', label: 'Midnight', ink: 'light' },
-  { id: 'slate', hex: '#2b303b', label: 'Graphite', ink: 'light' }
+  { id: 'amber', hex: '#fce7a6', label: 'Butter', ink: 'dark' },
+  { id: 'peach', hex: '#ffdab6', label: 'Peach', ink: 'dark' },
+  { id: 'coral', hex: '#ffcdc3', label: 'Blush', ink: 'dark' },
+  { id: 'rose', hex: '#ffd2e7', label: 'Rose', ink: 'dark' },
+  { id: 'lavender', hex: '#e6dafe', label: 'Lavender', ink: 'dark' },
+  { id: 'sky', hex: '#c7eaff', label: 'Sky', ink: 'dark' },
+  { id: 'mint', hex: '#c0f7d8', label: 'Mint', ink: 'dark' },
+  { id: 'mist', hex: '#e0eaee', label: 'Mist', ink: 'dark' },
+  { id: 'ivory', hex: '#f8f5ec', label: 'Paper', ink: 'dark' },
+  { id: 'teal', hex: '#174543', label: 'Deep teal', ink: 'light' },
+  { id: 'indigo', hex: '#323153', label: 'Night', ink: 'light' },
+  { id: 'slate', hex: '#2a2e34', label: 'Graphite', ink: 'light' }
 ];
 
 const TEMPLATES = {
@@ -231,7 +232,7 @@ function defaultSettings() {
     globalClickThrough: false,
     contentProtection: true,
     launchAtLogin: false,
-    defaultOpacity: 0.88,
+    defaultOpacity: 1,
     defaultFontSize: 14,
     defaultColor: 'amber',
     defaultMonospace: false,
@@ -240,7 +241,7 @@ function defaultSettings() {
     shortcuts: defaultShortcuts(),
     shortcutScopes: {},
     theme: 'system',
-    managerView: 'board',
+    managerView: 'list',
     formattedWhenIdle: true
   };
 }
@@ -377,7 +378,7 @@ function migrate(raw) {
     ? settings.sortBy
     : 'updated';
   settings.theme = THEMES.includes(settings.theme) ? settings.theme : 'system';
-  settings.managerView = MANAGER_VIEWS.includes(settings.managerView) ? settings.managerView : 'board';
+  settings.managerView = MANAGER_VIEWS.includes(settings.managerView) ? settings.managerView : 'list';
   settings.formattedWhenIdle = settings.formattedWhenIdle !== false;
   settings.shortcutScopes = normalizeScopes(settings.shortcutScopes);
   if (!NOTE_COLORS.some((c) => c.id === settings.defaultColor)) {

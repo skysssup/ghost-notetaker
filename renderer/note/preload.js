@@ -24,5 +24,6 @@ contextBridge.exposeInMainWorld('ghostNote', {
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   onUpdated: listen('note:updated'),
   onSettings: listen('note:settings'),
+  onTheme: listen('note:theme'),
   onSaveState: listen('app:saveState')
 });

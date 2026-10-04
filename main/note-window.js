@@ -7,17 +7,57 @@ const {
   applyAlwaysOnTop,
   applyContentProtection,
   applyClickThrough,
-  isWin,
-  isMac
+  isWin
 } = require('./platform');
-const { clampBoundsToDisplays } = require('./display');
+const { clampBoundsToDisplays, getDisplayById } = require('./display');
 
 const FLUSH_SCRIPT =
   'typeof window.__ghostFlushPending === "function" ? window.__ghostFlushPending() : ({ ok: true })';
 
-/** Window size of a note collapsed into a bubble. */
-const BUBBLE_SIZE = 64;
+/**
+ * Note windows are transparent around the paper so its shadow is not cut off:
+ * 16px on the top and sides and 32px below, where the shadow is longest. Saved
+ * bounds keep the meaning they had when windows left 8px (the paper plus 8px on
+ * every side), so a note's paper stays exactly where it was.
+ */
+const OUTSET = { side: 8, bottom: 24 };
+const toWindow = (b) => ({
+  x: b.x - OUTSET.side,
+  y: b.y - OUTSET.side,
+  width: b.width + 2 * OUTSET.side,
+  height: b.height + OUTSET.side + OUTSET.bottom
+});
+const fromWindow = (b) => ({
+  x: b.x + OUTSET.side,
+  y: b.y + OUTSET.side,
+  width: b.width - 2 * OUTSET.side,
+  height: b.height - OUTSET.side - OUTSET.bottom
+});
+
+/** Window of a note collapsed into a bubble: a 56px circle with the same margins. */
+const BUBBLE_SIZE = { width: 88, height: 104 };
+const bubbleWindow = (b) => ({ x: b.x - OUTSET.side, y: b.y - OUTSET.side, ...BUBBLE_SIZE });
 const NOTE_MIN = { width: 220, height: 180 };
+
+/**
+ * Keep a note on a visible work area. macOS and Linux window managers push a window
+ * that crosses the edge of the work area back inside, which would move the paper
+ * after it appears and save the pushed position, so keep the whole window inside
+ * there. Windows places windows where asked.
+ */
+function clampNote(bounds, displayId) {
+  const clamped = clampBoundsToDisplays(bounds, displayId);
+  if (isWin()) return clamped;
+  const display = getDisplayById(clamped.displayId) || screen.getPrimaryDisplay();
+  const area = display.workArea || display.bounds;
+  const win = toWindow(clamped);
+  const inside = (pos, size, start, length) => Math.max(start, Math.min(pos, start + length - size));
+  return {
+    ...clamped,
+    x: inside(win.x, win.width, area.x, area.width) + OUTSET.side,
+    y: inside(win.y, win.height, area.y, area.height) + OUTSET.side
+  };
+}
 
 class NoteWindowController {
   constructor({ store, onChanged, attachShortcuts }) {
@@ -47,7 +87,8 @@ class NoteWindowController {
    */
   _boundsPatch(win, note) {
     const live = win.getBounds();
-    const bounds = note && note.collapsed ? { ...note.bounds, x: live.x, y: live.y } : live;
+    const saved = fromWindow(live);
+    const bounds = note && note.collapsed ? { ...note.bounds, x: saved.x, y: saved.y } : saved;
     const display = screen.getDisplayMatching(live);
     return { bounds, displayId: display ? display.id : null };
   }
@@ -66,7 +107,7 @@ class NoteWindowController {
     const note = this.store.getNote(noteId);
     if (!note) return null;
 
-    const clamped = clampBoundsToDisplays(note.bounds, note.displayId);
+    const clamped = clampNote(note.bounds, note.displayId);
     if (
       clamped.x !== note.bounds.x ||
       clamped.y !== note.bounds.y ||
@@ -78,18 +119,11 @@ class NoteWindowController {
       });
     }
 
-    const opts = noteWindowOptions({
-      x: clamped.x,
-      y: clamped.y,
-      width: note.collapsed ? BUBBLE_SIZE : clamped.width,
-      height: note.collapsed ? BUBBLE_SIZE : clamped.height
-    });
+    const opts = noteWindowOptions(note.collapsed ? bubbleWindow(clamped) : toWindow(clamped));
     if (note.collapsed) {
-      opts.minWidth = BUBBLE_SIZE;
-      opts.minHeight = BUBBLE_SIZE;
+      opts.minWidth = BUBBLE_SIZE.width;
+      opts.minHeight = BUBBLE_SIZE.height;
       opts.resizable = false;
-      // The macOS blur would fill the whole square window behind the round bubble.
-      delete opts.vibrancy;
     }
     opts.webPreferences.preload = path.join(__dirname, '..', 'renderer', 'note', 'preload.js');
 
@@ -297,16 +331,15 @@ class NoteWindowController {
     if (collapsed) {
       this.store.updateNote(noteId, { collapsed: true, ...this._boundsPatch(win, note) });
       win.setResizable(false);
-      if (isMac()) win.setVibrancy(null);
-      win.setMinimumSize(BUBBLE_SIZE, BUBBLE_SIZE);
-      win.setBounds({ x: live.x, y: live.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE });
+      win.setMinimumSize(BUBBLE_SIZE.width, BUBBLE_SIZE.height);
+      win.setBounds({ x: live.x, y: live.y, ...BUBBLE_SIZE });
     } else {
-      const expanded = clampBoundsToDisplays({ ...note.bounds, x: live.x, y: live.y }, note.displayId);
+      const saved = fromWindow(live);
+      const expanded = clampNote({ ...note.bounds, x: saved.x, y: saved.y }, note.displayId);
       const bounds = { x: expanded.x, y: expanded.y, width: expanded.width, height: expanded.height };
       win.setMinimumSize(NOTE_MIN.width, NOTE_MIN.height);
       win.setResizable(true);
-      if (isMac()) win.setVibrancy('under-window');
-      win.setBounds(bounds);
+      win.setBounds(toWindow(bounds));
       this.store.updateNote(noteId, { collapsed: false, bounds, displayId: expanded.displayId });
     }
     this.applyNoteAppearance(noteId);
@@ -356,11 +389,11 @@ class NoteWindowController {
       if (win.isDestroyed()) continue;
       const note = this.store.getNote(id);
       if (!note) continue;
-      const live = win.getBounds();
-      const source = note.collapsed ? { ...note.bounds, x: live.x, y: live.y } : live;
-      const clamped = clampBoundsToDisplays(source, note.displayId);
+      const saved = fromWindow(win.getBounds());
+      const source = note.collapsed ? { ...note.bounds, x: saved.x, y: saved.y } : saved;
+      const clamped = clampNote(source, note.displayId);
       const bounds = { x: clamped.x, y: clamped.y, width: clamped.width, height: clamped.height };
-      win.setBounds(note.collapsed ? { x: bounds.x, y: bounds.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE } : bounds);
+      win.setBounds(note.collapsed ? bubbleWindow(bounds) : toWindow(bounds));
       this.store.updateNote(id, { bounds, displayId: clamped.displayId });
     }
   }

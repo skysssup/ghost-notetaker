@@ -25,7 +25,7 @@
     query: '',
     visibility: 'all',
     sortBy: 'updated',
-    layout: 'board',
+    layout: 'list',
     view: 'notes',
     selected: new Set(),
     focusId: null,
@@ -46,10 +46,10 @@
     notesScroller: $('notesScroller'),
     empty: $('empty'),
     emptyTitle: $('emptyTitle'),
-    emptyText: $('emptyText'),
     search: $('search'),
     searchHint: $('searchHint'),
     sortBy: $('sortBy'),
+    sortLabel: $('sortLabel'),
     btnBoard: $('btnBoard'),
     btnList: $('btnList'),
     btnNewNote: $('btnNewNote'),
@@ -65,7 +65,6 @@
     countAll: $('countAll'),
     countOpen: $('countOpen'),
     countHidden: $('countHidden'),
-    filterChips: $('filterChips'),
     bulkBar: $('bulkBar'),
     selectAll: $('selectAll'),
     btnBulkShow: $('btnBulkShow'),
@@ -109,6 +108,15 @@
   }
 
   const modLabel = () => (isMac() ? '⌘' : 'Ctrl+');
+  /** Key names as the platform writes them in menus. */
+  const keyHint = (key) => (isMac() ? { Delete: '⌘⌫', Enter: '↩' } : { Delete: 'Del' })[key] || key;
+
+  const SORTS = [
+    { value: 'updated', label: 'Last edited' },
+    { value: 'created', label: 'Created' },
+    { value: 'title', label: 'Title' },
+    { value: 'color', label: 'Color' }
+  ];
 
   function colorOf(id) {
     const colors = (state.bootstrap && state.bootstrap.colors) || [];
@@ -280,7 +288,7 @@
     (footerButtons || []).forEach((b) => {
       const btn = el('button', {
         type: 'button',
-        class: b.primary ? 'primary-btn' : b.danger ? 'danger-btn' : 'ghost-btn',
+        class: b.primary ? 'primary-btn' : b.danger ? 'danger-btn' : 'hairline-btn',
         text: b.label
       });
       btn.addEventListener('click', async () => {
@@ -380,8 +388,9 @@
   }
 
   /**
-   * items: { label, icon?, hint?, danger?, attrs?, onSelect } | 'sep' |
-   * { swatches, current, label, onPick }. Opens under `anchor` or at `point`.
+   * items: { label, icon?, checked?, hint?, danger?, attrs?, onSelect } | 'sep' |
+   * { swatches, current, label, onPick }. Items with `checked` are radio items
+   * with a check mark on the current one. Opens under `anchor` or at `point`.
    */
   function openMenu(items, { anchor = null, point = null, label = 'Actions' } = {}) {
     closeMenu();
@@ -392,7 +401,7 @@
           'div',
           { class: 'menu-colors', role: 'group', 'aria-label': item.label },
           [
-            el('span', { class: 'menu-colors-label', text: item.label }),
+            el('span', { class: 'section-label', text: item.label }),
             el(
               'div',
               { class: 'swatches' },
@@ -405,7 +414,7 @@
                   'aria-label': c.label,
                   title: c.label,
                   'data-color': c.id,
-                  style: `background:${c.hex}`,
+                  style: `background-color:${c.hex}`,
                   onclick: () => {
                     closeMenu({ restoreFocus: true });
                     item.onPick(c.id);
@@ -416,12 +425,14 @@
           ]
         );
       }
+      const radio = item.checked !== undefined;
       return el(
         'button',
         {
           type: 'button',
           class: `menu-item${item.danger ? ' danger' : ''}`,
-          role: 'menuitem',
+          role: radio ? 'menuitemradio' : 'menuitem',
+          'aria-checked': radio ? String(item.checked) : undefined,
           disabled: item.disabled,
           ...(item.attrs || {}),
           onclick: () => {
@@ -430,8 +441,8 @@
           }
         },
         [
+          ...(radio ? [item.checked ? icon('check') : el('span', { class: 'check-slot' })] : []),
           ...(item.icon ? [icon(item.icon)] : []),
-          ...(item.swatch ? [el('span', { class: 'menu-swatch', style: `background:${item.swatch}` })] : []),
           el('span', { text: item.label }),
           ...(item.hint ? [el('span', { class: 'hint', text: item.hint })] : [])
         ]
@@ -445,7 +456,7 @@
       : { left: point.x, right: point.x, top: point.y, bottom: point.y };
     const w = els.menu.offsetWidth;
     const h = els.menu.offsetHeight;
-    let left = anchor ? rect.right - w : rect.left;
+    let left = anchor ? (anchor.dataset.menuAlign === 'start' ? rect.left : rect.right - w) : rect.left;
     let top = rect.bottom + 4;
     if (top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 4);
     left = Math.min(Math.max(8, left), window.innerWidth - w - 8);
@@ -544,7 +555,7 @@
           'button',
           {
             type: 'button',
-            class: 'row-btn',
+            class: 'icon-btn',
             title: `Rename ${ws.name}`,
             'aria-label': `Rename workspace ${ws.name}`,
             onclick: () => promptRenameWorkspace(ws)
@@ -558,12 +569,12 @@
             'button',
             {
               type: 'button',
-              class: 'row-btn danger',
+              class: 'icon-btn danger',
               title: `Delete ${ws.name}`,
               'aria-label': `Delete workspace ${ws.name}`,
               onclick: () => confirmDeleteWorkspace(ws)
             },
-            [icon('trash')]
+            [icon('trash-2')]
           )
         );
       }
@@ -613,7 +624,7 @@
         el('li', {}, [
           el('button', {
             type: 'button',
-            class: `tag-btn${active ? ' active' : ''}`,
+            class: `side-btn tag-row${active ? ' active' : ''}`,
             'aria-pressed': String(active),
             text: `#${tag}`,
             onclick: () => setTag(active ? null : tag)
@@ -649,7 +660,7 @@
               onclick: () => run('Could not open the note', () => api.openNote(note.id))
             },
             [
-              el('span', { class: 'dot', style: `background:${colorOf(note.color).hex}` }),
+              el('span', { class: 'recent-square', style: `background-color:${colorOf(note.color).hex}` }),
               el('span', { class: 'label', text: note.title || 'Untitled' })
             ]
           )
@@ -683,9 +694,13 @@
     els.viewTitle.textContent = ws ? ws.name : 'Notes';
     const inWs = state.allNotes.filter((n) => n.workspaceId === state.activeWorkspaceId);
     const onScreen = inWs.filter((n) => n.visible).length;
-    els.viewSub.textContent = inWs.length
-      ? `${plural(inWs.length, 'note')} · ${onScreen} on screen`
-      : 'No notes yet';
+    els.viewSub.replaceChildren(inWs.length ? `${plural(inWs.length, 'note')} · ${onScreen} on screen` : 'No notes yet');
+    if (state.selectedTag) {
+      els.viewSub.append(
+        ` · showing #${state.selectedTag} `,
+        el('button', { type: 'button', class: 'link-btn', text: 'Show all', onclick: () => setTag(null) })
+      );
+    }
     const matching = state.allNotes.filter(matchesFilters);
     const open = matching.filter((n) => n.visible).length;
     els.countAll.textContent = String(matching.length);
@@ -694,33 +709,14 @@
     for (const btn of document.querySelectorAll('[data-visibility]')) {
       btn.setAttribute('aria-pressed', String(btn.dataset.visibility === state.visibility));
     }
-    const chips = [];
-    if (state.selectedTag) {
-      chips.push(filterChip(`Tag #${state.selectedTag}`, 'Remove tag filter', () => setTag(null)));
-    }
-    if (state.query) {
-      chips.push(
-        filterChip(`Search “${state.query}”`, 'Clear search', () => {
-          els.search.value = '';
-          applySearch('');
-        })
-      );
-    }
-    els.filterChips.replaceChildren(...chips);
-    els.filterChips.hidden = !chips.length;
   }
 
-  function filterChip(text, removeLabel, onRemove) {
-    return el('span', { class: 'filter-chip' }, [
-      text,
-      el('button', { type: 'button', 'aria-label': removeLabel, title: removeLabel, onclick: onRemove }, [icon('close')])
-    ]);
-  }
-
+  /** The strip above the notes: column labels in the list, the bulk actions while notes are selected. */
   function updateBulkUi() {
     const n = state.selected.size;
     els.selCount.textContent = n ? `${n} selected` : '';
     els.bulkBar.classList.toggle('has-selection', n > 0);
+    els.bulkBar.classList.toggle('columns', state.layout === 'list');
     els.noteList.classList.toggle('selecting', n > 0);
     for (const b of [els.btnBulkShow, els.btnBulkHide, els.btnBulkTrash]) b.disabled = n === 0;
     els.selectAll.checked = state.notes.length > 0 && n === state.notes.length;
@@ -731,9 +727,6 @@
   function renderEmptyState() {
     const filtered = Boolean(state.query || state.selectedTag || state.visibility !== 'all');
     els.emptyTitle.textContent = filtered ? 'No matching notes' : 'No notes in this workspace';
-    els.emptyText.textContent = filtered
-      ? 'Try a different search, tag, or filter.'
-      : 'Create a note or pick a template to get started.';
   }
 
   function toggleSelected(id, on) {
@@ -760,12 +753,18 @@
     target.focus();
   }
 
+  /** Long notes and notes with images get the tall card on the board. */
+  function isTall(note) {
+    const text = bodyText(note);
+    return /!\[[^\]]*\]\(/.test(text) || text.split('\n').filter((line) => line.trim()).length > 3;
+  }
+
   function noteCard(note) {
     const title = note.title || 'Untitled';
     const color = colorOf(note.color);
     const selected = state.selected.has(note.id);
     const card = el('article', {
-      class: `note-card${color.ink === 'light' ? ' ink-light' : ''}${selected ? ' selected' : ''}`,
+      class: `note-card${note.visible ? ' visible-note' : ''}${color.ink === 'light' ? ' ink-light' : ''}${selected ? ' selected' : ''}${isTall(note) ? ' tall' : ''}`,
       role: 'listitem',
       tabindex: '-1',
       'data-note-id': note.id,
@@ -798,7 +797,7 @@
         'aria-haspopup': 'menu',
         'aria-expanded': 'false'
       },
-      [icon('more')]
+      [icon('ellipsis')]
     );
     more.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -811,44 +810,52 @@
     if (text.trim()) body.innerHTML = md.renderMarkdown(text.slice(0, 1500));
     else body.appendChild(el('p', { class: 'card-empty', text: 'Empty note' }));
 
-    const pills = [el('span', { class: `pill ${note.visible ? 'visible' : 'hidden-note'}`, text: note.visible ? 'On screen' : 'Hidden' })];
-    if (note.clickThrough) {
-      pills.push(
-        el('button', {
-          type: 'button',
-          class: 'pill warn',
-          text: 'Click-through',
-          title: 'Click-through is on: clicks pass through this note. Click to turn it off.',
-          'aria-label': `Turn off click-through for ${title}`,
-          onclick: (e) => {
-            e.stopPropagation();
-            setClickThrough(note, false);
-          }
-        })
-      );
-    }
-
-    const openBtn = el('button', {
-      type: 'button',
-      class: 'open-btn',
-      text: note.visible ? 'Hide' : 'Open',
-      title: note.visible ? 'Hide this note from the screen' : 'Show this note on screen'
-    });
+    const openBtn = el(
+      'button',
+      {
+        type: 'button',
+        class: 'icon-btn open-btn',
+        title: note.visible ? 'Hide this note from the screen' : 'Show this note on screen'
+      },
+      [icon(note.visible ? 'eye-off' : 'eye'), el('span', { class: 'sr-only', text: note.visible ? 'Hide' : 'Open' })]
+    );
     openBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (note.visible) hideNote(note);
       else openNote(note);
     });
 
+    const clickThrough = note.clickThrough
+      ? [
+          el(
+            'button',
+            {
+              type: 'button',
+              class: 'ct-btn',
+              'data-clickthrough': 'on',
+              title: 'Click-through is on: clicks pass through this note. Click to turn it off.',
+              'aria-label': `Turn off click-through for ${title}`,
+              onclick: (e) => {
+                e.stopPropagation();
+                setClickThrough(note, false);
+              }
+            },
+            [icon('ghost'), el('span', { text: 'Click-through' })]
+          )
+        ]
+      : [];
+
     card.append(
-      el('header', { class: 'card-head' }, [check, el('span', { class: 'color-dot', 'aria-hidden': 'true' }), titleEl, more]),
-      body,
-      el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
-      el('footer', { class: 'card-foot' }, [
-        el('div', { class: 'card-pills' }, pills),
-        el('div', { class: 'card-tags' }, (note.tags || []).slice(0, 4).map((t) => el('span', { class: 'chip', text: `#${t}` }))),
+      check,
+      el('span', { class: 'paper-dot', 'aria-hidden': 'true' }),
+      el('div', { class: 'card-main' }, [titleEl, el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }), body]),
+      el('span', { class: 'card-tags', text: (note.tags || []).map((t) => `#${t}`).join('  ') }),
+      ...clickThrough,
+      el('div', { class: 'card-foot' }, [
         el('span', { class: 'when', text: formatRelative(note.updatedAt), title: `Edited ${new Date(note.updatedAt).toLocaleString()}` }),
-        openBtn
+        el('span', { class: 'state' }, [el('i', { class: 'dot', 'aria-hidden': 'true' }), el('span', { class: 'state-word', text: note.visible ? 'On screen' : 'Hidden' })]),
+        openBtn,
+        more
       ])
     );
 
@@ -892,6 +899,34 @@
     if (!state.notes.length) renderEmptyState();
     renderHeader();
     updateBulkUi();
+    fitCardBodies();
+  }
+
+  /**
+   * Board previews end at the last paragraph, list item, or table row that
+   * fits the card; a paragraph cut by the card's edge is clamped to whole lines.
+   */
+  function fitCardBodies() {
+    if (state.layout !== 'board') return;
+    for (const body of els.noteList.querySelectorAll('.card-body')) {
+      const limit = body.getBoundingClientRect().bottom + 0.5;
+      for (const block of body.children) {
+        const items = block.matches('ul, ol') ? block.children : block.matches('table') ? block.querySelectorAll('tr') : [block];
+        for (const node of items) {
+          node.style.visibility = '';
+          node.classList.remove('clamped');
+          const box = node.getBoundingClientRect();
+          if (box.bottom <= limit) continue;
+          const lines = Math.floor((limit - box.top) / parseFloat(getComputedStyle(node).lineHeight));
+          if (block === node && lines >= 1 && node.matches('p, blockquote')) {
+            node.classList.add('clamped');
+            node.style.setProperty('--lines', String(lines));
+          } else {
+            node.style.visibility = 'hidden';
+          }
+        }
+      }
+    }
   }
 
   function setLayout(layout) {
@@ -977,8 +1012,8 @@
     const colors = (state.bootstrap && state.bootstrap.colors) || [];
     const items = [
       note.visible
-        ? { label: 'Bring to front', icon: 'eye', hint: 'Enter', onSelect: () => openNote(note) }
-        : { label: 'Show on screen', icon: 'eye', hint: 'Enter', onSelect: () => openNote(note) }
+        ? { label: 'Bring to front', icon: 'eye', hint: keyHint('Enter'), onSelect: () => openNote(note) }
+        : { label: 'Show on screen', icon: 'eye', hint: keyHint('Enter'), onSelect: () => openNote(note) }
     ];
     if (note.visible) items.push({ label: 'Hide', icon: 'eye-off', onSelect: () => hideNote(note) });
     items.push(
@@ -988,25 +1023,25 @@
       {
         swatches: colors,
         current: note.color,
-        label: 'Color',
+        label: 'Paper',
         onPick: (color) => run('Could not change the color', () => updateNoteOrThrow(note.id, { color }))
       },
       'sep'
     );
     if (state.workspaces.length > 1) {
-      items.push({ label: 'Move to workspace…', icon: 'move', onSelect: () => promptMoveNote(note) });
+      items.push({ label: 'Move to workspace…', icon: 'folder-input', onSelect: () => promptMoveNote(note) });
     }
     items.push(
       { label: 'Duplicate', icon: 'copy', onSelect: () => duplicateNote(note) },
-      { label: 'Export as Markdown…', icon: 'export', onSelect: () => exportMarkdown(note) }
+      { label: 'Export as Markdown…', icon: 'file-output', onSelect: () => exportMarkdown(note) }
     );
     if (note.clickThrough) {
       items.push({ label: 'Turn off click-through', icon: 'ghost', onSelect: () => setClickThrough(note, false) });
     }
     items.push('sep', {
       label: 'Move to trash',
-      icon: 'trash',
-      hint: 'Del',
+      icon: 'trash-2',
+      hint: keyHint('Delete'),
       danger: true,
       onSelect: () => trashNotes([note])
     });
@@ -1206,7 +1241,7 @@
         const age = Math.floor((Date.now() - Date.parse(note.trashedAt)) / 86400000);
         const left = Math.max(1, TRASH_DAYS - age);
         const row = el('article', { class: 'note-card', role: 'listitem', 'data-note-id': note.id }, [
-          el('span', { class: 'color-dot', 'aria-hidden': 'true' }),
+          el('span', { class: 'paper-dot', 'aria-hidden': 'true' }),
           el('h3', { class: 'note-title', text: title }),
           el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
           el('span', {
@@ -1216,14 +1251,14 @@
           el('div', { class: 'trash-actions' }, [
             el('button', {
               type: 'button',
-              class: 'ghost-btn',
+              class: 'text-btn',
               text: 'Restore',
               'aria-label': `Restore ${title}`,
               onclick: () => restoreFromTrash(note)
             }),
             el('button', {
               type: 'button',
-              class: 'ghost-btn danger',
+              class: 'text-btn danger',
               text: 'Delete forever',
               'aria-label': `Delete ${title} forever`,
               onclick: () => confirmDeleteForever(note)
@@ -1359,24 +1394,44 @@
           const recording = state.recording && state.recording.id === s.id;
           const keyCell = recording
             ? el('span', { class: 'kbd recording', text: 'Press the new shortcut… (Esc cancels)' })
-            : el('span', { class: 'kbd', text: s.display || '—' });
+            : s.display
+              ? el('span', { class: 'kbd', text: s.display })
+              : el('span', { class: 'field-hint', text: 'Not set' });
           const statusClass = ['active', 'local', 'app'].includes(s.status) ? 'ok' : s.status === 'off' ? '' : 'bad';
           let scopeCell;
           if (s.canBeGlobal) {
-            const select = el('select', { class: 'scope-select', 'aria-label': `Where ${s.label} works` }, [
-              el('option', { value: 'global', text: 'Everywhere' }),
-              el('option', { value: 'app', text: 'In Ghost Notetaker' })
-            ]);
-            select.value = s.effectiveScope === 'app' ? 'app' : 'global';
-            select.addEventListener('change', async () => {
+            const scope = s.effectiveScope === 'app' ? 'app' : 'global';
+            const setScope = async (value) => {
               try {
-                render(null, await api.setShortcutScope(s.id, select.value));
+                render(null, await api.setShortcutScope(s.id, value));
                 flashSaved();
               } catch (err) {
                 render(errorMessage(err));
               }
+            };
+            const scopeBtn = el(
+              'button',
+              {
+                type: 'button',
+                class: 'menu-btn',
+                'aria-haspopup': 'menu',
+                'aria-expanded': 'false',
+                'aria-label': `Where ${s.label} works`,
+                'data-menu-align': 'start'
+              },
+              [el('span', { text: scope === 'app' ? 'In Ghost Notetaker' : 'Everywhere' }), icon('chevron-down')]
+            );
+            scopeBtn.addEventListener('click', () => {
+              if (anchorJustClosed(scopeBtn)) return;
+              openMenu(
+                [
+                  { label: 'Everywhere', checked: scope === 'global', onSelect: () => setScope('global') },
+                  { label: 'In Ghost Notetaker', checked: scope === 'app', onSelect: () => setScope('app') }
+                ],
+                { anchor: scopeBtn, label: `Where ${s.label} works` }
+              );
             });
-            scopeCell = select;
+            scopeCell = scopeBtn;
           } else {
             scopeCell = el('span', { class: 'field-hint', text: 'In a focused note' });
           }
@@ -1388,7 +1443,7 @@
             el('td', { class: 'row-actions' }, [
               el('button', {
                 type: 'button',
-                class: 'link-btn',
+                class: 'text-btn',
                 text: 'Change',
                 'aria-label': `Change shortcut for ${s.label}`,
                 onclick: async () => {
@@ -1401,7 +1456,7 @@
               }),
               el('button', {
                 type: 'button',
-                class: 'link-btn',
+                class: 'text-btn',
                 text: 'Clear',
                 disabled: !s.accelerator,
                 'aria-label': `Clear shortcut for ${s.label}`,
@@ -1426,19 +1481,19 @@
     }
 
     render();
-    return settingsCard('setShortcuts', 'keyboard', 'Keyboard shortcuts', null, [
+    return settingsSection('setShortcuts', 'Keyboard shortcuts', null, [
+      table,
       el('div', { class: 'set-block' }, [
-        table,
         message,
         el('p', {
           class: 'field-hint',
           text: '“Everywhere” shortcuts work while other apps are focused. A shortcut that another app or the OS already uses cannot be registered; pick a different one, or limit it to Ghost Notetaker windows.'
         }),
-        el('div', { class: 'button-row', style: 'margin-top:12px' }, [
+        el('div', { class: 'button-row' }, [
           el('button', {
             type: 'button',
             id: 'btnResetShortcuts',
-            class: 'ghost-btn',
+            class: 'hairline-btn',
             text: 'Reset to defaults',
             onclick: async () => {
               try {
@@ -1461,7 +1516,7 @@
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => {
       els.settingsSaved.hidden = true;
-    }, 1800);
+    }, 1500);
   }
 
   async function saveSettings(patch) {
@@ -1477,13 +1532,9 @@
     }
   }
 
-  function settingsCard(id, iconName, title, aside, children) {
-    return el('section', { class: 'set-card', id, 'aria-labelledby': `${id}H` }, [
-      el('div', { class: 'set-card-head' }, [
-        icon(iconName),
-        el('h2', { id: `${id}H`, text: title }),
-        ...(aside ? [el('p', { text: aside })] : [])
-      ]),
+  function settingsSection(id, title, aside, children) {
+    return el('section', { class: 'set-section', id, 'aria-labelledby': `${id}H` }, [
+      el('h2', { class: 'section-label', id: `${id}H` }, [title, ...(aside ? [el('span', { class: 'section-aside', text: aside })] : [])]),
       ...children
     ]);
   }
@@ -1504,39 +1555,32 @@
     return el('span', { class: 'switch' }, [input, el('span', { class: 'track', 'aria-hidden': 'true' })]);
   }
 
-  function themeOption(value, label, iconName) {
-    return el(
-      'button',
-      {
-        type: 'button',
-        class: 'theme-option',
-        role: 'radio',
-        'aria-checked': 'false',
-        'data-theme': value,
-        onclick: async () => {
-          markTheme(value);
-          if (await saveSettings({ theme: value })) await reload();
-        }
-      },
-      [
-        el('div', { class: `theme-preview tp-${value}`, 'aria-hidden': 'true' }, [
-          el('i', { class: 'tp-side' }),
-          el('i', { class: 'tp-main' }, [
-            el('i', { class: 'tp-card', style: 'background:#ffe58a' }),
-            el('i', { class: 'tp-card', style: 'background:#a7f3d0' }),
-            el('i', { class: 'tp-card', style: 'background:#c7b8ff' }),
-            el('i', { class: 'tp-card', style: 'background:#3b3f8f' })
-          ])
-        ]),
-        el('span', {}, [icon(iconName), label])
-      ]
-    );
+  function themeOption(value, label) {
+    return el('button', {
+      type: 'button',
+      class: 'seg-btn theme-option',
+      role: 'radio',
+      'aria-checked': 'false',
+      'data-theme': value,
+      text: label,
+      onclick: async () => {
+        markTheme(value);
+        if (await saveSettings({ theme: value })) await reload();
+      }
+    });
   }
 
   function markTheme(value) {
     for (const b of els.settingsBody.querySelectorAll('.theme-option')) {
       b.setAttribute('aria-checked', String(b.dataset.theme === value));
     }
+  }
+
+  function saveFontSize(value) {
+    const font = $('sFont');
+    const size = Math.min(28, Math.max(10, Math.round(Number(value) || 14)));
+    font.value = String(size);
+    saveSettings({ defaultFontSize: size });
   }
 
   function renderSettings() {
@@ -1547,7 +1591,7 @@
 
     const swatches = el(
       'div',
-      { class: 'swatches', id: 'sColor', role: 'radiogroup', 'aria-label': 'Color for new notes' },
+      { class: 'swatches', id: 'sColor', role: 'radiogroup', 'aria-label': 'Paper for new notes' },
       colors.map((c) =>
         el('button', {
           type: 'button',
@@ -1557,7 +1601,7 @@
           'aria-label': c.label,
           title: c.label,
           'data-color': c.id,
-          style: `background:${c.hex}`,
+          style: `background-color:${c.hex}`,
           onclick: () => {
             markSwatch(c.id);
             saveSettings({ defaultColor: c.id });
@@ -1573,12 +1617,11 @@
     });
     opacity.addEventListener('change', () => saveSettings({ defaultOpacity: Number(opacity.value) / 100 }));
 
-    const font = el('input', { id: 'sFont', class: 'number-input', type: 'number', min: '10', max: '28' });
-    font.addEventListener('change', () => {
-      const size = Math.min(28, Math.max(10, Math.round(Number(font.value) || 14)));
-      font.value = String(size);
-      saveSettings({ defaultFontSize: size });
-    });
+    const font = el('input', { id: 'sFont', type: 'number', min: '10', max: '28', 'aria-label': 'Text size in pixels' });
+    font.addEventListener('change', () => saveFontSize(font.value));
+    const step = (delta, name, label) =>
+      el('button', { type: 'button', class: 'icon-btn', 'aria-label': label, onclick: () => saveFontSize(Number(font.value) + delta) }, [icon(name)]);
+    const stepper = el('div', { class: 'stepper' }, [step(-1, 'minus', 'Smaller text'), font, step(1, 'plus', 'Larger text')]);
 
     const protectHint = caps.contentProtection
       ? isMac()
@@ -1587,38 +1630,36 @@
       : `${linuxOnly} Notes appear in screenshots, recordings, and screen shares.`;
 
     const capability = (ok, text) =>
-      el('li', {}, [el('span', { class: `mark ${ok ? 'yes' : 'no'}`, text: ok ? '✓' : '!' }), el('span', { text })]);
+      el('li', { class: ok ? 'yes' : 'no' }, [el('i', { class: 'dot', 'aria-hidden': 'true' }), el('span', { text })]);
 
     const keys = [
       ['/', 'Search notes'],
       [`${modLabel()}N`, 'New note'],
       ['← → ↑ ↓', 'Move between notes'],
-      ['Enter', 'Show the note on screen'],
+      [keyHint('Enter'), 'Show the note on screen'],
       ['Space', 'Select or unselect'],
       ['F2', 'Rename'],
-      ['Delete', 'Move to the trash (Undo in the message that appears)'],
+      [keyHint('Delete'), 'Move to the trash (Undo in the message that appears)'],
       ['Esc', 'Clear the search or selection; leave Settings and Trash']
     ];
 
     els.settingsBody.replaceChildren(
-      settingsCard('setAppearance', 'palette', 'Appearance', null, [
-        el('div', { class: 'set-row' }, [
-          el('div', { class: 'set-label' }, [
-            el('strong', { text: 'Notes Manager theme' }),
-            el('p', { class: 'field-hint', text: 'System follows your computer’s light or dark setting. Notes keep their own colors.' })
+      settingsSection('setAppearance', 'Appearance', null, [
+        setRow({
+          label: 'Theme',
+          hint: 'System follows your computer’s light or dark setting. Notes keep their own paper colors.',
+          control: el('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Theme' }, [
+            themeOption('system', 'System'),
+            themeOption('light', 'Light'),
+            themeOption('dark', 'Dark')
           ])
-        ]),
-        el('div', { class: 'theme-choice', role: 'radiogroup', 'aria-label': 'Theme' }, [
-          themeOption('system', 'System', 'monitor'),
-          themeOption('light', 'Light', 'sun'),
-          themeOption('dark', 'Dark', 'moon')
-        ])
+        })
       ]),
-      settingsCard('setNotes', 'notes', 'New notes', 'Applies to notes you create from now on', [
-        setRow({ label: 'Color', control: swatches }),
+      settingsSection('setNotes', 'New notes', 'Applies to notes you create from now on', [
+        setRow({ label: 'Paper', control: swatches }),
         setRow({ label: 'Opacity', forId: 'sOpacity', control: el('div', { class: 'range-row' }, [opacity, opacityOut]) }),
-        setRow({ label: 'Text size (px)', forId: 'sFont', control: font }),
-        setRow({ label: 'Use a monospace font', forId: 'sMono', control: switchControl('sMono', (v) => saveSettings({ defaultMonospace: v })) }),
+        setRow({ label: 'Text size', forId: 'sFont', control: stepper }),
+        setRow({ label: 'Monospace', forId: 'sMono', control: switchControl('sMono', (v) => saveSettings({ defaultMonospace: v })) }),
         setRow({
           label: 'Show formatted Markdown when not editing',
           forId: 'sFormatted',
@@ -1626,7 +1667,7 @@
           control: switchControl('sFormatted', (v) => saveSettings({ formattedWhenIdle: v }))
         })
       ]),
-      settingsCard('setPrivacy', 'shield', 'Privacy and behavior', null, [
+      settingsSection('setPrivacy', 'Privacy and behavior', null, [
         setRow({
           label: 'Hide notes and this window from screen capture',
           forId: 'sProtect',
@@ -1652,28 +1693,30 @@
       ]),
       shortcutsSection(),
       backupsSection(),
-      settingsCard('setData', 'database', 'Data', null, [
+      settingsSection('setData', 'Data', null, [
         el('div', { class: 'set-block' }, [
           el('p', { class: 'data-path' }, ['Notes are saved on this computer in ', el('code', { text: boot.dataFile }), '.']),
           el('p', {
             class: 'field-hint',
             text: 'Ghost Notetaker makes no network requests of its own. Exports include pasted images, so one file holds a whole notebook.'
           }),
-          el('div', { class: 'button-row', style: 'margin-top:12px' }, [
-            el('button', { type: 'button', id: 'btnExport', class: 'ghost-btn', onclick: exportAll }, [icon('download'), 'Export all notes…']),
-            el('button', { type: 'button', id: 'btnImport', class: 'ghost-btn', onclick: promptImport }, [icon('upload'), 'Import backup…']),
-            el('button', { type: 'button', id: 'btnRevealData', class: 'ghost-btn', onclick: () => api.revealDataFile() }, [icon('folder'), 'Show notes file'])
+          el('div', { class: 'button-row' }, [
+            el('button', { type: 'button', id: 'btnExport', class: 'hairline-btn', onclick: exportAll }, ['Export all notes…']),
+            el('button', { type: 'button', id: 'btnImport', class: 'hairline-btn', onclick: promptImport }, ['Import backup…']),
+            el('button', { type: 'button', id: 'btnRevealData', class: 'hairline-btn', onclick: () => api.revealDataFile() }, ['Show notes file'])
           ])
         ])
       ]),
-      settingsCard('setAbout', 'info', 'About', `Ghost Notetaker ${boot.version}`, [
+      settingsSection('setAbout', 'About', `Ghost Notetaker ${boot.version}`, [
         el('div', { class: 'set-block' }, [
           el('ul', { class: 'caps-list' }, [
             capability(caps.contentProtection, caps.contentProtection ? 'Notes can be hidden from screen capture (best effort; test your own apps).' : `Screen-capture hiding: ${linuxOnly}`),
             capability(caps.clickThroughHover, caps.clickThroughHover ? 'Click-through notes still respond when you hover the top bar.' : 'Click-through notes ignore the mouse until you turn click-through off.'),
             capability(caps.launchAtLogin, caps.launchAtLogin ? 'Can start when you log in.' : `Launch at login: ${linuxOnly}`)
-          ]),
-          el('h3', { class: 'field-hint', style: 'margin:14px 0 8px;font-weight:700', text: 'Notes Manager keys' }),
+          ])
+        ]),
+        el('div', { class: 'set-block' }, [
+          el('h3', { class: 'section-label', text: 'Notes Manager keys' }),
           el('div', { class: 'keys-grid' }, keys.flatMap(([k, d]) => [el('kbd', { text: k }), el('span', { text: d })]))
         ])
       ])
@@ -1697,7 +1740,7 @@
     markSwatch(s.defaultColor);
     const opacity = $('sOpacity');
     if (opacity && document.activeElement !== opacity) {
-      opacity.value = String(Math.round((s.defaultOpacity || 0.88) * 100));
+      opacity.value = String(Math.round((s.defaultOpacity || 1) * 100));
       $('sOpacityOut').textContent = `${opacity.value}%`;
     }
     const font = $('sFont');
@@ -1716,7 +1759,7 @@
   }
 
   function updateSettingsNav() {
-    const sections = Array.from(els.settingsBody.querySelectorAll('.set-card'));
+    const sections = Array.from(els.settingsBody.querySelectorAll('.set-section'));
     const y = els.settingsScroller.scrollTop + 40;
     let current = sections[0];
     for (const s of sections) if (s.offsetTop <= y) current = s;
@@ -1745,15 +1788,15 @@
   const backupList = el('ul', { class: 'backup-list', id: 'backupList' });
 
   function backupsSection() {
-    return settingsCard('setBackups', 'history', 'Backups', null, [
+    return settingsSection('setBackups', 'Backups', null, [
       el('div', { class: 'set-block' }, [
         el('p', {
           class: 'field-hint',
           text: 'Once a day Ghost Notetaker copies your notes file into the backups folder and keeps the 10 newest copies. Restoring replaces every note and workspace; a copy of your current notes is made first, so a restore can be undone.'
         }),
-        el('div', { class: 'button-row', style: 'margin-top:12px' }, [
-          el('button', { type: 'button', id: 'btnBackupNow', class: 'ghost-btn', onclick: backupNow }, [icon('history'), 'Back up now']),
-          el('button', { type: 'button', id: 'btnRevealBackups', class: 'ghost-btn', onclick: () => api.revealBackups() }, [icon('folder'), 'Open backups folder'])
+        el('div', { class: 'button-row' }, [
+          el('button', { type: 'button', id: 'btnBackupNow', class: 'hairline-btn', onclick: backupNow }, ['Back up now']),
+          el('button', { type: 'button', id: 'btnRevealBackups', class: 'hairline-btn', onclick: () => api.revealBackups() }, ['Open backups folder'])
         ])
       ]),
       backupList
@@ -1779,7 +1822,7 @@
           el('span', { class: 'size-col', text: formatBytes(b.size) }),
           el('button', {
             type: 'button',
-            class: 'ghost-btn',
+            class: 'text-btn',
             text: 'Restore…',
             'aria-label': `Restore the backup from ${label}`,
             onclick: () => confirmRestore(b, label)
@@ -1934,6 +1977,8 @@
     if (seq !== reloadSeq) return;
     state.bootstrap = boot;
     document.documentElement.dataset.theme = boot.darkMode ? 'dark' : 'light';
+    document.documentElement.dataset.platform = boot.platform;
+    if (boot.accentColor) document.documentElement.style.setProperty('--accent', boot.accentColor);
     state.workspaces = boot.workspaces;
     state.activeWorkspaceId = boot.activeWorkspaceId;
     state.allNotes = allNotes;
@@ -1942,7 +1987,7 @@
     state.tags = tags;
     if (boot.settings.sortBy) {
       state.sortBy = boot.settings.sortBy;
-      els.sortBy.value = state.sortBy;
+      els.sortLabel.textContent = (SORTS.find((x) => x.value === state.sortBy) || SORTS[0]).label;
     }
     if (state.selectedTag && !tags.includes(state.selectedTag)) state.selectedTag = null;
     renderSaveBanner(boot.saveError);
@@ -1980,13 +2025,30 @@
     });
   }
 
-  els.sortBy.addEventListener('change', async () => {
-    state.sortBy = els.sortBy.value;
-    await api.updateSettings({ sortBy: state.sortBy });
-    await reloadNotesOnly();
+  els.sortBy.addEventListener('click', () => {
+    if (anchorJustClosed(els.sortBy)) return;
+    openMenu(
+      SORTS.map((sort) => ({
+        label: sort.label,
+        checked: sort.value === state.sortBy,
+        onSelect: async () => {
+          state.sortBy = sort.value;
+          els.sortLabel.textContent = sort.label;
+          await api.updateSettings({ sortBy: sort.value });
+          await reloadNotesOnly();
+        }
+      })),
+      { anchor: els.sortBy, label: 'Sort notes' }
+    );
   });
 
   els.btnBoard.addEventListener('click', () => setLayout('board'));
+  els.noteList.addEventListener('load', fitCardBodies, true);
+  let fitTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(fitCardBodies, 100);
+  });
   els.btnList.addEventListener('click', () => setLayout('list'));
 
   els.selectAll.addEventListener('change', () => {
@@ -2014,19 +2076,30 @@
     const i = cards.indexOf(card);
     const note = noteById(card.dataset.noteId);
     if (!note) return;
-    let cols = 1;
-    if (state.layout === 'board') {
-      cols = cards.filter((c) => c.offsetTop === cards[0].offsetTop).length || 1;
-    }
-    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
-    if (step && !(state.layout === 'list' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight'))) {
+    // Up and down follow the sort order (down each board column); left and right
+    // move to the nearest card in the next board column.
+    if (e.key === 'ArrowUp' && i === 0) {
       e.preventDefault();
-      if (e.key === 'ArrowUp' && i - cols < 0) {
-        els.search.focus();
-        return;
-      }
-      const next = cards[Math.min(cards.length - 1, Math.max(0, i + step))];
-      focusCard(next.dataset.noteId);
+      els.search.focus();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      focusCard(cards[Math.min(cards.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))].dataset.noteId);
+      return;
+    }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && state.layout === 'board') {
+      e.preventDefault();
+      const from = card.getBoundingClientRect();
+      const right = e.key === 'ArrowRight';
+      const others = cards.map((c) => ({ c, r: c.getBoundingClientRect() })).filter(({ r }) => (right ? r.left > from.right : r.right < from.left));
+      if (!others.length) return;
+      const column = right ? Math.min(...others.map(({ r }) => r.left)) : Math.max(...others.map(({ r }) => r.left));
+      const middle = (r) => r.top + r.height / 2;
+      const target = others
+        .filter(({ r }) => Math.abs(r.left - column) < 2)
+        .sort((a, b) => Math.abs(middle(a.r) - middle(from)) - Math.abs(middle(b.r) - middle(from)))[0];
+      focusCard(target.c.dataset.noteId);
       return;
     }
     if (e.key === 'Home' || e.key === 'End') {
@@ -2099,7 +2172,7 @@
     openMenu(
       (state.bootstrap.templates || []).map((t) => ({
         label: t.label,
-        icon: 'notes',
+        icon: 'file-text',
         attrs: { 'data-template': t.id },
         onSelect: () => createNote(t.id)
       })),
@@ -2133,10 +2206,10 @@
   async function init() {
     state.bootstrap = await api.getBootstrap();
     const s = state.bootstrap.settings;
-    state.layout = s.managerView === 'list' ? 'list' : 'board';
+    state.layout = s.managerView === 'board' ? 'board' : 'list';
     els.btnBoard.setAttribute('aria-pressed', String(state.layout === 'board'));
     els.btnList.setAttribute('aria-pressed', String(state.layout === 'list'));
-    els.brandSub.textContent = `Notes Manager · ${state.bootstrap.version}`;
+    els.brandSub.textContent = state.bootstrap.version;
     els.searchHint.textContent = '/';
     await reload();
     els.search.focus();

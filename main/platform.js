@@ -1,6 +1,6 @@
 'use strict';
 
-const { app } = require('electron');
+const { app, systemPreferences } = require('electron');
 
 function isMac() {
   return process.platform === 'darwin';
@@ -24,6 +24,17 @@ function capabilities() {
   };
 }
 
+/** The OS accent color as #rrggbb on macOS and Windows; null elsewhere. */
+function accentColor() {
+  if (!isMac() && !isWin()) return null;
+  try {
+    const rgba = systemPreferences.getAccentColor();
+    return /^[0-9a-f]{6,8}$/i.test(rgba) ? `#${rgba.slice(0, 6)}` : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function hideDockIcon() {
   if (isMac() && app.dock && typeof app.dock.hide === 'function') {
     try {
@@ -45,7 +56,8 @@ function noteWindowOptions(bounds) {
     frame: false,
     transparent: true,
     resizable: true,
-    hasShadow: true,
+    // The paper draws its own shadow inside the window's transparent margin.
+    hasShadow: false,
     show: false,
     skipTaskbar: true,
     focusable: true,
@@ -58,11 +70,7 @@ function noteWindowOptions(bounds) {
     }
   };
 
-  if (isMac()) {
-    opts.type = 'panel';
-    opts.vibrancy = 'under-window';
-    opts.visualEffectState = 'active';
-  }
+  if (isMac()) opts.type = 'panel';
 
   return opts;
 }
@@ -141,6 +149,7 @@ module.exports = {
   isMac,
   isWin,
   capabilities,
+  accentColor,
   hideDockIcon,
   noteWindowOptions,
   applyAlwaysOnTop,

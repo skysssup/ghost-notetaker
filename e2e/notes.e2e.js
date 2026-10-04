@@ -115,7 +115,7 @@ describe('sticky notes', () => {
     note = await noteWindow(second.app, id);
     assert.equal(await note.inputValue('#title'), 'Sprint review prep');
     assert.equal(await note.inputValue('#editor'), '## Agenda\n- Demo the export flow');
-    assert.deepEqual(await note.locator('.tag-chip span:first-child').allTextContents(), ['#demo']);
+    assert.deepEqual(await note.locator('.tag').allTextContents(), ['#demo']);
   });
 
   it('keeps text typed just before the window is closed from the OS', async () => {
@@ -234,16 +234,67 @@ describe('sticky notes', () => {
     await app.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0].setBounds({ x: 140, y: 150, width: 420, height: 360 });
     });
+    // Saved bounds are the paper plus 8px; the window adds another 8px around it (24px below).
     const after = await waitForStore(
       dataFile,
       (s) => {
         const n = s.notes.find((x) => x.id === id);
-        return n && n.bounds.width === 420 && n.bounds.height === 360;
+        return n && n.bounds.x === 148 && n.bounds.y === 158 && n.bounds.width === 404 && n.bounds.height === 328;
       },
       'new bounds on disk'
     );
     assert.equal(after.notes[0].updatedAt, editedAt);
     assert.ok(note);
+  });
+
+  it('notes in the corners of the screen keep their windows on screen and stay put', async () => {
+    const first = await start();
+    await firstNote(first.app);
+    await waitForStore(first.dataFile, (s) => s.notes.length === 1, 'welcome note on disk');
+    const display = await first.app.evaluate(({ screen }) => {
+      const { id, workArea } = screen.getPrimaryDisplay();
+      return { id, area: workArea };
+    });
+    await first.app.close();
+    const { area } = display;
+    const size = { width: 400, height: 300 };
+    const corners = {
+      note_corner_tl: { x: area.x, y: area.y },
+      note_corner_br: { x: area.x + area.width - size.width, y: area.y + area.height - size.height }
+    };
+    const seeded = readStore(first.dataFile);
+    const welcome = seeded.notes[0];
+    seeded.notes = Object.entries(corners).map(([id, at]) => ({ ...welcome, id, bounds: { ...at, ...size }, displayId: display.id }));
+    fs.writeFileSync(first.dataFile, JSON.stringify(seeded, null, 2));
+
+    // A note's window reaches 8px past its saved bounds (24px below). macOS and Linux window
+    // managers push a window back inside the work area, so there a note in a corner moves in
+    // by that much once; Windows leaves it where it is.
+    const pulledIn = process.platform !== 'win32';
+    const expected = {
+      note_corner_tl: pulledIn ? { x: area.x + 8, y: area.y + 8 } : corners.note_corner_tl,
+      note_corner_br: pulledIn
+        ? { x: corners.note_corner_br.x - 8, y: corners.note_corner_br.y - 24 }
+        : corners.note_corner_br
+    };
+    for (let run = 0; run < 2; run++) {
+      const { app } = await start({ userDataDir: first.userDataDir });
+      const shown = () =>
+        app.evaluate(({ BrowserWindow }) =>
+          BrowserWindow.getAllWindows().filter((w) => w.isVisible() && w.webContents.getURL().includes('note.html')).length
+        );
+      await waitFor(async () => (await shown()) === 2, 'both notes shown');
+      await new Promise((r) => setTimeout(r, 1000));
+      const windows = {};
+      for (const id of Object.keys(corners)) windows[id] = await windowBounds(app, id);
+      await app.close();
+      const notes = readStore(first.dataFile).notes;
+      for (const id of Object.keys(corners)) {
+        const { bounds } = notes.find((n) => n.id === id);
+        assert.deepEqual(bounds, { ...expected[id], ...size }, `${id} saved`);
+        assert.deepEqual({ x: windows[id].x, y: windows[id].y }, { x: bounds.x - 8, y: bounds.y - 8 }, `${id} window`);
+      }
+    }
   });
 
   it('all controls fit when the note is at its minimum size', async () => {

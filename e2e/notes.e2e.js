@@ -269,7 +269,8 @@ describe('sticky notes', () => {
 
     // A note's window reaches 8px past its saved bounds (24px below). macOS and Linux window
     // managers push a window back inside the work area, so there a note in a corner moves in
-    // by that much once; Windows leaves it where it is.
+    // by that much once; Windows leaves it where it is. macOS may round its work area, so its
+    // edges can land a pixel further in.
     const pulledIn = process.platform !== 'win32';
     const expected = {
       note_corner_tl: pulledIn ? { x: area.x + 8, y: area.y + 8 } : corners.note_corner_tl,
@@ -277,6 +278,7 @@ describe('sticky notes', () => {
         ? { x: corners.note_corner_br.x - 8, y: corners.note_corner_br.y - 24 }
         : corners.note_corner_br
     };
+    const placed = [];
     for (let run = 0; run < 2; run++) {
       const { app } = await start({ userDataDir: first.userDataDir });
       const shown = () =>
@@ -291,10 +293,14 @@ describe('sticky notes', () => {
       const notes = readStore(first.dataFile).notes;
       for (const id of Object.keys(corners)) {
         const { bounds } = notes.find((n) => n.id === id);
-        assert.deepEqual(bounds, { ...expected[id], ...size }, `${id} saved`);
+        const where = `${id} saved at ${JSON.stringify(bounds)}, work area ${JSON.stringify(area)}`;
+        assert.ok(Math.abs(bounds.x - expected[id].x) <= 1 && Math.abs(bounds.y - expected[id].y) <= 1, where);
+        assert.deepEqual({ width: bounds.width, height: bounds.height }, size, where);
         assert.deepEqual({ x: windows[id].x, y: windows[id].y }, { x: bounds.x - 8, y: bounds.y - 8 }, `${id} window`);
       }
+      placed.push(notes.map((n) => n.bounds));
     }
+    assert.deepEqual(placed[1], placed[0], 'the notes stay put after a restart');
   });
 
   it('all controls fit when the note is at its minimum size', async () => {

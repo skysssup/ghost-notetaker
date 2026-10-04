@@ -75,6 +75,8 @@ jobs:
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
+        env:
+          CSC_FOR_PULL_REQUEST: true
         run: npx electron-builder --mac --${{ matrix.arch }} --publish never
 
       - name: Smoke-test packaged app (Linux AppImage and .deb)

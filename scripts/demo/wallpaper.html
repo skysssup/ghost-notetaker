@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Wallpaper</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #c7d3d8;
+      }
+      svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- An original wallpaper for the README screenshots and videos: rolling hills in morning haze. -->
+    <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#9fb6c3" />
+          <stop offset="0.38" stop-color="#c9d3d3" />
+          <stop offset="0.6" stop-color="#ebe3d3" />
+          <stop offset="1" stop-color="#f3e7d4" />
+        </linearGradient>
+        <radialGradient id="sun" cx="0.7" cy="0.44" r="0.42">
+          <stop offset="0" stop-color="#fff6e6" stop-opacity="0.95" />
+          <stop offset="0.35" stop-color="#fbe9cf" stop-opacity="0.45" />
+          <stop offset="1" stop-color="#fbe9cf" stop-opacity="0" />
+        </radialGradient>
+        <linearGradient id="h1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#a7b8bf" />
+          <stop offset="0.25" stop-color="#b9c5c6" />
+        </linearGradient>
+        <linearGradient id="h2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#8ea5a8" />
+          <stop offset="0.3" stop-color="#a3b5b3" />
+        </linearGradient>
+        <linearGradient id="h3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7a958c" />
+          <stop offset="0.3" stop-color="#89a196" />
+        </linearGradient>
+        <linearGradient id="h4" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#5f8072" />
+          <stop offset="0.35" stop-color="#6c8a7b" />
+        </linearGradient>
+        <linearGradient id="h5" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#466a5b" />
+          <stop offset="0.4" stop-color="#3f6052" />
+        </linearGradient>
+        <linearGradient id="h6" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#2f4d41" />
+          <stop offset="0.5" stop-color="#253f35" />
+        </linearGradient>
+        <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f6efe2" stop-opacity="0" />
+          <stop offset="1" stop-color="#f6efe2" stop-opacity="0.35" />
+        </linearGradient>
+        <filter id="soft" x="-5%" y="-5%" width="110%" height="110%">
+          <feGaussianBlur stdDeviation="1.6" />
+        </filter>
+        <filter id="grain" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" />
+          <feColorMatrix values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.045 0" />
+        </filter>
+      </defs>
+
+      <rect width="1440" height="900" fill="url(#sky)" />
+      <rect width="1440" height="900" fill="url(#sun)" />
+
+      <path filter="url(#soft)" fill="url(#h1)" d="M0 452 C 90 430, 170 404, 250 414 S 390 382, 480 396 S 640 436, 740 418 S 900 368, 1000 384 S 1170 440, 1270 424 S 1390 400, 1440 408 L1440 900 L0 900 Z" />
+      <rect x="0" y="380" width="1440" height="200" fill="url(#haze)" />
+      <path filter="url(#soft)" fill="url(#h2)" d="M0 516 C 140 484, 280 494, 400 512 S 640 466, 780 480 S 1040 526, 1180 508 S 1360 474, 1440 486 L1440 900 L0 900 Z" />
+      <rect x="0" y="470" width="1440" height="170" fill="url(#haze)" />
+      <path fill="url(#h3)" d="M0 598 C 180 548, 360 558, 520 586 S 820 622, 980 584 S 1260 536, 1440 562 L1440 900 L0 900 Z" />
+      <rect x="0" y="540" width="1440" height="160" fill="url(#haze)" opacity="0.7" />
+      <path fill="url(#h4)" d="M0 684 C 220 636, 420 646, 600 672 S 900 720, 1080 678 S 1320 636, 1440 648 L1440 900 L0 900 Z" />
+      <path fill="url(#h5)" d="M0 768 C 260 722, 500 736, 700 760 S 1020 800, 1220 758 S 1400 736, 1440 740 L1440 900 L0 900 Z" />
+      <path fill="url(#h6)" d="M0 852 C 300 812, 560 826, 780 846 S 1140 878, 1440 828 L1440 900 L0 900 Z" />
+
+      <rect width="1440" height="900" filter="url(#grain)" />
+    </svg>
+  </body>
+</html>

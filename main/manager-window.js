@@ -7,8 +7,8 @@ const { applyContentProtection, isMac, isWin } = require('./platform');
 
 /** Canvas and text colors from renderer/shared/tokens.css, for the parts of the window the OS draws. */
 const CHROME = {
-  light: { canvas: '#f8f6f4', text: '#1d1a15' },
-  dark: { canvas: '#121110', text: '#ebe7e2' }
+  light: { canvas: '#fbfaf8', text: '#1c1a17' },
+  dark: { canvas: '#191816', text: '#edeae4' }
 };
 const chromeColors = () => CHROME[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'];
 const isWindows11 = () => isWin() && Number(os.release().split('.')[2]) >= 22000;

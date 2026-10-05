@@ -56,7 +56,7 @@
   let shownView = null;
 
   const BUBBLE = 56;
-  const colorOf = (id) => colors.find((x) => x.id === id) || { hex: '#e0eaee', ink: 'dark' };
+  const colorOf = (id) => colors.find((x) => x.id === id) || { hex: '#e7e9ea', ink: 'dark' };
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const morphMs = () => (reducedMotion.matches ? 0 : 240);
   // Panels follow the app theme (System, Light, or Dark) chosen in Settings.

@@ -1,8 +1,7 @@
 'use strict';
 
-// Minimal Electron entry used by lib.js to render the demo's HTML assets
-// (desktop background, sample chart) to PNG. It opens one frameless window of
-// the requested size and leaves the screenshot to Playwright.
+// Minimal Electron entry that lib.js uses to render an HTML file to PNG: one
+// frameless window of the requested size; Playwright takes the screenshot.
 const { app, BrowserWindow } = require('electron');
 
 const arg = (name) => {
@@ -22,5 +21,5 @@ app.whenReady().then(() => {
     show: true,
     webPreferences: { sandbox: true, contextIsolation: true }
   });
-  win.loadFile(arg('file'), { query: Object.fromEntries(new URLSearchParams(arg('query'))) });
+  win.loadFile(arg('file'), { hash: arg('hash') });
 });

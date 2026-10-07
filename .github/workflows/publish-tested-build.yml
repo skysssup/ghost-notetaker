@@ -1,0 +1,114 @@
+name: Publish tested build
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build and test run to publish
+        required: true
+        default: '37265434430'
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-tested-build
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Validate source build
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID" > run.json
+          node <<'NODE'
+          const fs = require('fs');
+          const run = JSON.parse(fs.readFileSync('run.json'));
+          if (run.conclusion !== 'success' || run.status !== 'completed' ||
+              run.event !== 'push' || run.head_branch !== 'main' ||
+              run.path !== '.github/workflows/build.yml' ||
+              run.head_repository.full_name !== process.env.GH_REPO) {
+            throw new Error('Only a successful main-branch Build and test run can be published');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'sha=' + run.head_sha + '\n');
+          NODE
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID/artifacts" > artifacts.json
+          node <<'NODE'
+          const fs = require('fs');
+          const artifacts = JSON.parse(fs.readFileSync('artifacts.json')).artifacts;
+          for (const name of ['dist-linux-x64', 'dist-windows-x64', 'dist-macos-arm64', 'dist-macos-x64']) {
+            const matches = artifacts.filter(a => a.name === name && !a.expired);
+            if (matches.length !== 1) throw new Error('Missing or ambiguous artifact: ' + name);
+          }
+          NODE
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          pattern: dist-*
+          path: release
+          merge-multiple: true
+
+      - name: Validate installers and prepare release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const version = require('./package.json').version;
+          if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid release version');
+          const expected = [
+            'linux-amd64.deb', 'linux-x86_64.AppImage',
+            'mac-arm64.dmg', 'mac-arm64.zip', 'mac-x64.dmg', 'mac-x64.zip',
+            'win-x64-setup.exe'
+          ].map(s => 'ghost-notetaker-' + version + '-' + s).sort();
+          const actual = fs.readdirSync('release').sort();
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('Unexpected installer set');
+          for (const name of actual) if (fs.statSync('release/' + name).size < 1000000) throw new Error('Invalid installer: ' + name);
+          const section = fs.readFileSync('CHANGELOG.md', 'utf8').split('## [' + version + ']')[1]?.split('\n## [')[0];
+          if (!section?.includes('### ')) throw new Error('Missing changelog section');
+          const header = 'Ghost Notetaker ' + version + '\n\n';
+          const validation = '\n\n### Downloads and validation\nAll seven attached installers come from the successful [four-platform build](https://github.com/' + process.env.GITHUB_REPOSITORY + '/actions/runs/' + process.env.SOURCE_RUN + ') at commit `' + process.env.SOURCE_SHA + '`. That run passed unit tests, end-to-end tests, packaging, and packaged-app smoke tests on Windows x64, Linux x64, macOS arm64, and macOS x64. SHA-256 checksums are attached.\n\nmacOS builds are ad-hoc signed without notarization; Windows builds have no Microsoft signing certificate. See the [installation instructions](https://github.com/' + process.env.GITHUB_REPOSITORY + '/blob/v' + version + '/README.md#install) and [testing limitations](https://github.com/' + process.env.GITHUB_REPOSITORY + '/blob/v' + version + '/docs/TESTING.md). Screen-capture exclusion remains best effort and is unavailable on Linux.\n';
+          fs.writeFileSync('release-notes.md', header + section.replace(/^ - [^\n]*\n/, '') + validation);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'tag=v' + version + '\nversion=' + version + '\n');
+          NODE
+          (cd release && sha256sum -- * > SHA256SUMS.txt)
+        env:
+          SOURCE_RUN: ${{ inputs.run_id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+
+      - name: Publish release with installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to replace it."
+            exit 1
+          fi
+          gh release create "$TAG" release/* --draft --target "$SOURCE_SHA" --title "Ghost Notetaker $VERSION" --notes-file release-notes.md
+          count=$(gh release view "$TAG" --json assets --jq '.assets | length')
+          test "$count" = 8
+          gh release edit "$TAG" --draft=false --latest

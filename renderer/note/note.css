@@ -72,7 +72,7 @@ button {
 /* The window keeps 16px around the paper (32px below) so its shadow is not cut off. */
 .shell,
 .bubble {
-  --note-tint: #f4ebcf;
+  --note-tint: #fbe9b0;
   --ink: var(--paper-ink);
   --ink-2: var(--paper-ink-secondary);
   --ink-3: rgba(31, 29, 26, 0.52);
@@ -81,7 +81,8 @@ button {
   --ink-press: rgba(31, 29, 26, 0.1);
   --ink-code: rgba(31, 29, 26, 0.055);
   --paper-edge: rgba(0, 0, 0, 0.07);
-  --paper-shine: rgba(255, 255, 255, 0.65);
+  --paper-shine: rgba(255, 255, 255, 0.7);
+  --paper-sheen: rgba(255, 255, 255, 0.34);
   --capsule: color-mix(in srgb, var(--note-tint) 62%, rgba(255, 255, 255, 0.86));
   box-shadow: var(--shadow-note);
 }
@@ -96,7 +97,8 @@ button {
   --ink-press: rgba(243, 241, 236, 0.13);
   --ink-code: rgba(243, 241, 236, 0.08);
   --paper-edge: rgba(255, 255, 255, 0.09);
-  --paper-shine: rgba(255, 255, 255, 0.08);
+  --paper-shine: rgba(255, 255, 255, 0.1);
+  --paper-sheen: rgba(255, 255, 255, 0.05);
   --capsule: color-mix(in srgb, var(--note-tint) 78%, rgba(255, 255, 255, 0.3));
 }
 
@@ -113,7 +115,9 @@ button {
   overflow: hidden;
   border-radius: var(--r-3);
   color: var(--ink);
-  background: color-mix(in srgb, var(--note-tint) calc(var(--opacity) * 100%), transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--paper-sheen) calc(var(--opacity) * 100%), transparent), transparent 96px),
+    color-mix(in srgb, var(--note-tint) calc(var(--opacity) * 100%), transparent);
   transform-origin: 0 0;
 }
 
@@ -261,7 +265,8 @@ body.collapsed .shell {
   cursor: pointer;
   transition:
     background-color var(--t-fast) var(--ease),
-    color var(--t-fast) var(--ease);
+    color var(--t-fast) var(--ease),
+    transform var(--t-panel) var(--spring);
 }
 
 .icon-btn .ico,
@@ -279,6 +284,12 @@ body.collapsed .shell {
 .icon-btn:active,
 .md-toolbar button:active {
   background: var(--ink-press);
+  transform: scale(0.92);
+}
+
+.icon-btn.close:hover {
+  background: var(--danger-solid);
+  color: #fff;
 }
 
 .icon-btn .glyph {
@@ -288,8 +299,9 @@ body.collapsed .shell {
 
 /* A note in click-through keeps a ghost on screen, so it is clear why clicks pass through. */
 #btnGhost[aria-pressed='true'] {
-  background: var(--ink);
-  color: var(--note-tint);
+  background: var(--brand-gradient);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 3px oklch(0.45 0.17 35 / 0.45);
 }
 
 .chrome-buttons:has(#btnGhost[aria-pressed='true']) {
@@ -357,7 +369,8 @@ body.collapsed .shell {
   width: min(236px, calc(100% - 16px));
   max-height: calc(100vh - 92px);
   overflow-y: auto;
-  padding: 4px 0;
+  overscroll-behavior: contain;
+  padding: 2px 0;
   border-radius: var(--r-3);
   color: var(--text);
   -webkit-app-region: no-drag;
@@ -370,7 +383,7 @@ body.collapsed .shell {
 }
 
 .panel-section {
-  padding: 10px 14px;
+  padding: 9px 12px;
 }
 
 .panel-section + .panel-section {
@@ -378,7 +391,7 @@ body.collapsed .shell {
 }
 
 .panel-label {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-weight: 600;
@@ -388,7 +401,7 @@ body.collapsed .shell {
   display: grid;
   grid-template-columns: repeat(6, 22px);
   justify-content: space-between;
-  row-gap: 10px;
+  row-gap: 8px;
 }
 
 .swatch {
@@ -397,7 +410,7 @@ body.collapsed .shell {
   padding: 0;
   border: none;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--swatch-edge);
+  box-shadow: inset 0 0 0 1px var(--swatch-edge), inset 0 1px 0 rgba(255, 255, 255, 0.45);
   cursor: pointer;
   transition:
     transform var(--t-fast) var(--ease),
@@ -408,11 +421,15 @@ body.collapsed .shell {
   transform: scale(1.1);
 }
 
+.swatch:active {
+  transform: scale(0.94);
+}
+
 .swatch[aria-checked='true'] {
   box-shadow:
     inset 0 0 0 1px var(--swatch-edge),
     0 0 0 2px var(--raised),
-    0 0 0 3.5px var(--text);
+    0 0 0 3.5px var(--brand);
 }
 
 .panel-row {
@@ -420,7 +437,7 @@ body.collapsed .shell {
   grid-template-columns: 62px minmax(0, 1fr) 38px;
   align-items: center;
   gap: 10px;
-  height: 30px;
+  height: 28px;
   color: var(--text);
 }
 
@@ -473,7 +490,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  height: 30px;
+  height: 28px;
   padding: 0;
   border: none;
   background: none;
@@ -484,8 +501,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .switch {
   position: relative;
   flex: none;
-  width: 30px;
-  height: 18px;
+  width: 32px;
+  height: 19px;
   border-radius: 999px;
   background: var(--fill-strong);
   box-shadow: inset 0 0 0 1px var(--hairline);
@@ -497,21 +514,21 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.24);
   transition: transform var(--t-panel) var(--spring);
 }
 
 [aria-checked='true'] > .switch {
-  background: var(--ink-bg);
-  box-shadow: none;
+  background: var(--brand-gradient);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 [aria-checked='true'] > .switch::after {
-  transform: translateX(12px);
+  transform: translateX(13px);
 }
 
 .text-btn {
@@ -535,7 +552,12 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .text-btn:hover {
-  background: var(--fill-strong);
+  background: var(--brand-gradient);
+  color: #fff;
+}
+
+.text-btn:hover .ico {
+  color: #fff;
 }
 
 /* ---------- formatting bar: a capsule that floats above the footer while editing ---------- */
@@ -651,6 +673,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   font-size: var(--font-size);
   line-height: 1.58;
   letter-spacing: -0.006em;
+  caret-color: var(--brand-solid);
   user-select: text;
 }
 
@@ -1109,7 +1132,9 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: var(--note-tint);
+  background:
+    radial-gradient(120% 90% at 30% 15%, rgba(255, 255, 255, 0.55), transparent 60%),
+    var(--note-tint);
   color: var(--ink);
   font: 650 21px/1 var(--font-content);
   letter-spacing: -0.02em;
@@ -1119,7 +1144,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .bubble:hover {
-  transform: scale(1.05);
+  transform: scale(1.06);
 }
 
 .bubble[hidden] {

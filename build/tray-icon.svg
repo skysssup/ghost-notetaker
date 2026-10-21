@@ -1,8 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <rect x="1" y="1" width="30" height="30" rx="7.5" fill="#2d4a42"/>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#f88a3d"/>
+      <stop offset="0.55" stop-color="#ee5e23"/>
+      <stop offset="1" stop-color="#cc3719"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="30" height="30" rx="7.5" fill="url(#tile)"/>
   <g transform="translate(3.04 2.47) scale(1.08)">
-    <path fill="#f3e9cc" d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q17.33 22.1 15.55 19.6Q13.78 22.1 12 19.6Q10.22 22.1 8.45 19.6Q6.67 22.1 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z"/>
-    <ellipse cx="10" cy="12.1" rx="1.15" ry="1.5" fill="#2d4a42"/>
-    <ellipse cx="14" cy="12.1" rx="1.15" ry="1.5" fill="#2d4a42"/>
+    <path fill="#fffbf3" d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q17.33 22.1 15.55 19.6Q13.78 22.1 12 19.6Q10.22 22.1 8.45 19.6Q6.67 22.1 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z"/>
+    <ellipse cx="10" cy="12.1" rx="1.15" ry="1.5" fill="#4e1b0f"/>
+    <ellipse cx="14" cy="12.1" rx="1.15" ry="1.5" fill="#4e1b0f"/>
   </g>
 </svg>

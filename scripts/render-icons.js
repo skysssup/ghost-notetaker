@@ -26,7 +26,7 @@ async function render(svgFile, size) {
     backgroundColor: '#00000000',
     webPreferences: { offscreen: true }
   });
-  const html = `<html><body style="margin:0;background:transparent"><img width="${size}" height="${size}" src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}"></body></html>`;
+  const html = `<html><body style="margin:0;overflow:hidden;background:transparent"><img style="display:block" width="${size}" height="${size}" src="data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}"></body></html>`;
   await win.loadURL(`data:text/html;base64,${Buffer.from(html).toString('base64')}`);
   await new Promise((resolve) => setTimeout(resolve, 300));
   const image = await win.webContents.capturePage({ x: 0, y: 0, width: size, height: size });

@@ -304,6 +304,9 @@ function registerIpc() {
     if (f.visible === true || f.visible === false) safe.visible = f.visible;
     if (f.trashed === true) safe.trashed = true;
     if (typeof f.sortBy === 'string') safe.sortBy = f.sortBy;
+    if (Array.isArray(f.colors)) {
+      safe.colors = f.colors.filter((c) => typeof c === 'string' && c.length <= 32).slice(0, 32);
+    }
     return store.listNotes(safe);
   });
   handle('notes:get', (_e, id) => store.getNote(requireId(id, 'noteId')));

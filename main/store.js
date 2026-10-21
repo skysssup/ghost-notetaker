@@ -405,6 +405,25 @@ function migrate(raw) {
   return state;
 }
 
+/** Lowercase text without accents, so "cafe" finds "Café". */
+function foldSearch(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+/** Words of a search; a note matches when every word is in its title, text, or tags. */
+function searchTerms(query) {
+  return foldSearch(query).split(/\s+/).filter(Boolean).slice(0, 12);
+}
+
+function noteMatchesSearch(note, terms) {
+  if (!terms.length) return true;
+  const haystack = foldSearch([note.title, note.content, ...(note.tags || [])].join('\n'));
+  return terms.every((t) => haystack.includes(t));
+}
+
 function sortNotes(notes, sortBy) {
   const list = notes.slice();
   switch (sortBy) {
@@ -767,14 +786,13 @@ class Store {
     }
     if (filter.visible === true) notes = notes.filter((n) => n.visible);
     if (filter.visible === false) notes = notes.filter((n) => !n.visible);
+    if (Array.isArray(filter.colors) && filter.colors.length) {
+      const colors = new Set(filter.colors);
+      notes = notes.filter((n) => colors.has(n.color));
+    }
     if (filter.query) {
-      const q = String(filter.query).toLowerCase();
-      notes = notes.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.content.toLowerCase().includes(q) ||
-          n.tags.some((t) => t.toLowerCase().includes(q))
-      );
+      const terms = searchTerms(filter.query);
+      notes = notes.filter((n) => noteMatchesSearch(n, terms));
     }
     return sortNotes(notes, filter.sortBy || this.state.settings.sortBy || 'updated');
   }
@@ -1268,5 +1286,8 @@ module.exports = {
   clampContent,
   normalizeTags,
   normalizeBounds,
-  sortNotes
+  sortNotes,
+  foldSearch,
+  searchTerms,
+  noteMatchesSearch
 };

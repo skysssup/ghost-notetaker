@@ -101,7 +101,12 @@
     modalTitle: $('modalTitle'),
     modalBody: $('modalBody'),
     modalFooter: $('modalFooter'),
-    modalClose: $('modalClose')
+    modalClose: $('modalClose'),
+    cmdk: $('cmdk'),
+    cmdkInput: $('cmdkInput'),
+    cmdkList: $('cmdkList'),
+    btnQuickFind: $('btnQuickFind'),
+    quickFindKey: $('quickFindKey')
   };
 
   let lastFocus = null;
@@ -677,13 +682,31 @@
               'aria-current': active ? 'true' : 'false',
               onclick: () => selectWorkspace(ws.id)
             },
-            [icon('folder'), el('span', { class: 'label', text: ws.name }), el('span', { class: 'count', text: String(counts.get(ws.id) || 0) })]
+            [
+              el('span', { class: 'ws-badge', style: `--ws-hue:${workspaceHue(ws)}`, 'aria-hidden': 'true', text: initialOf(ws.name) }),
+              el('span', { class: 'label', text: ws.name }),
+              el('span', { class: 'count', text: String(counts.get(ws.id) || 0) })
+            ]
           ),
           el('span', { class: 'row-actions' }, actions)
         ])
       );
     });
   }
+
+  /** A steady hue per workspace for its badge, picked from hues that sit with the paper colors. */
+  const WS_HUES = [40, 150, 250, 85, 330, 200, 15, 285];
+  function workspaceHue(ws) {
+    let h = 0;
+    for (const ch of String(ws.id)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+    const i = state.workspaces.indexOf(ws);
+    return WS_HUES[(i >= 0 ? i : h) % WS_HUES.length];
+  }
+
+  const initialOf = (text) => {
+    const first = String(text || '').trim().match(/[\p{L}\p{N}]/u);
+    return first ? first[0].toLocaleUpperCase() : '·';
+  };
 
   async function selectWorkspace(id) {
     try {
@@ -693,6 +716,7 @@
         state.selectedTag = null;
         state.selected.clear();
         state.focusId = null;
+        state.animateNext = true;
       }
       showView('notes');
       await reload();
@@ -707,6 +731,11 @@
       els.tagList.appendChild(el('li', { class: 'muted-item', text: 'No tags yet' }));
       return;
     }
+    const tagCounts = new Map();
+    for (const n of state.allNotes) {
+      if (n.workspaceId !== state.activeWorkspaceId) continue;
+      for (const t of new Set((n.tags || []).map((x) => x.toLowerCase()))) tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+    }
     state.tags.forEach((tag) => {
       const active = state.selectedTag === tag;
       els.tagList.appendChild(
@@ -719,7 +748,11 @@
               'aria-pressed': String(active),
               onclick: () => setTag(active ? null : tag)
             },
-            [el('span', { class: 'hash', text: '#' }), el('span', { class: 'label', text: tag })]
+            [
+              el('span', { class: 'hash', text: '#', 'aria-hidden': 'true' }),
+              el('span', { class: 'label', text: tag }),
+              el('span', { class: 'count', text: String(tagCounts.get(tag.toLowerCase()) || 0) })
+            ]
           )
         ])
       );
@@ -1014,7 +1047,7 @@
 
     card.append(
       check,
-      el('span', { class: 'paper-dot', 'aria-hidden': 'true' }),
+      el('span', { class: 'paper-dot', 'aria-hidden': 'true', 'data-initial': initialOf(title) }),
       el('div', { class: 'card-main' }, [titleEl, snippetEl, body]),
       tagsEl,
       ...clickThrough,
@@ -1062,6 +1095,7 @@
       els.noteList.classList.toggle('list', state.layout === 'list');
       els.noteList.replaceChildren(...state.notes.map(noteCard));
       const cards = cardEls();
+      if (state.animateNext) animateIn(cards);
       const keep = cards.find((c) => c.dataset.noteId === state.focusId) || cards[0];
       if (keep) keep.tabIndex = 0;
       if (hadFocus && keep) keep.focus();
@@ -1072,6 +1106,18 @@
     renderHeader();
     updateBulkUi();
     fitCardBodies();
+  }
+
+  /** Cards settle in one after another after the layout or the workspace changes. */
+  function animateIn(cards) {
+    state.animateNext = false;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    cards.slice(0, 24).forEach((card, i) => card.style.setProperty('--i', String(i)));
+    els.noteList.classList.remove('entering');
+    void els.noteList.offsetWidth;
+    els.noteList.classList.add('entering');
+    clearTimeout(state.enterTimer);
+    state.enterTimer = setTimeout(() => els.noteList.classList.remove('entering'), 900);
   }
 
   /**
@@ -1104,6 +1150,7 @@
   function setLayout(layout) {
     if (layout === state.layout) return;
     state.layout = layout;
+    state.animateNext = true;
     els.btnBoard.setAttribute('aria-pressed', String(layout === 'board'));
     els.btnList.setAttribute('aria-pressed', String(layout === 'list'));
     renderNotes();
@@ -1419,7 +1466,7 @@
         const age = Math.floor((Date.now() - Date.parse(note.trashedAt)) / 86400000);
         const left = Math.max(1, TRASH_DAYS - age);
         const row = el('article', { class: 'note-card', role: 'listitem', 'data-note-id': note.id }, [
-          el('span', { class: 'paper-dot', 'aria-hidden': 'true' }),
+          el('span', { class: 'paper-dot', 'aria-hidden': 'true', 'data-initial': initialOf(title) }),
           el('h3', { class: 'note-title', text: title }),
           el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
           el('span', {
@@ -1691,6 +1738,7 @@
   /** Keys that work inside the Notes Manager, for Settings and the ? sheet. */
   function managerKeys() {
     return [
+      [`${modLabel()}K`, 'Quick find: jump to a note, a workspace, or a command'],
       ['/', 'Search notes'],
       [`${modLabel()}N`, 'New note'],
       ['← → ↑ ↓', 'Move between notes'],
@@ -1773,16 +1821,15 @@
   function themeOption(value, label) {
     return el('button', {
       type: 'button',
-      class: 'seg-btn theme-option',
+      class: 'theme-option',
       role: 'radio',
       'aria-checked': 'false',
       'data-theme': value,
-      text: label,
       onclick: async () => {
         markTheme(value);
         if (await saveSettings({ theme: value })) await reload();
       }
-    });
+    }, [el('span', { class: 'theme-preview', 'aria-hidden': 'true' }), el('span', { class: 'theme-name', text: label })]);
   }
 
   function markTheme(value) {
@@ -1854,7 +1901,7 @@
         setRow({
           label: 'Theme',
           hint: 'System follows your computer’s light or dark setting. Notes keep their own paper colors.',
-          control: el('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Theme' }, [
+          control: el('div', { class: 'theme-picker', role: 'radiogroup', 'aria-label': 'Theme' }, [
             themeOption('system', 'System'),
             themeOption('light', 'Light'),
             themeOption('dark', 'Dark')
@@ -2341,10 +2388,14 @@
 
   document.addEventListener('keydown', (e) => {
     if (state.recording || !els.modal.classList.contains('hidden') || !els.menu.classList.contains('hidden')) return;
+    if (!els.cmdk.classList.contains('hidden')) return;
     const typing = Boolean(e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]'));
     const mod = isMac() ? e.metaKey : e.ctrlKey;
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if ((mod && key === 'f') || (!typing && !mod && key === '/')) {
+    if (mod && !e.shiftKey && !e.altKey && key === 'k') {
+      e.preventDefault();
+      openPalette();
+    } else if ((mod && key === 'f') || (!typing && !mod && key === '/')) {
       e.preventDefault();
       if (state.view !== 'notes') showView('notes');
       els.search.focus();
@@ -2379,6 +2430,195 @@
       }
     }
   });
+
+  // ---------- quick find (Ctrl/⌘+K) ----------
+
+  const palette = { items: [], index: 0, lastFocus: null };
+
+  function paletteCommands() {
+    const s = state.bootstrap.settings || {};
+    const cmds = [
+      { group: 'Commands', label: 'New note', icon: 'plus', hint: `${modLabel()}N`, run: () => createNote('blank') },
+      ...(state.bootstrap.templates || [])
+        .filter((t) => t.id !== 'blank')
+        .map((t) => ({ group: 'Commands', label: `New note from template: ${t.label}`, icon: 'file-text', run: () => createNote(t.id) })),
+      { group: 'Commands', label: 'Switch to list view', icon: 'list', hint: `${modLabel()}1`, run: () => (showView('notes'), setLayout('list')) },
+      { group: 'Commands', label: 'Switch to board view', icon: 'layout-grid', hint: `${modLabel()}2`, run: () => (showView('notes'), setLayout('board')) },
+      { group: 'Commands', label: 'New workspace…', icon: 'folder-plus', run: promptNewWorkspace },
+      { group: 'Commands', label: 'Open the trash', icon: 'trash-2', run: () => showView('trash') },
+      { group: 'Commands', label: 'Open settings', icon: 'settings', hint: `${modLabel()},`, run: () => showView('settings') },
+      { group: 'Commands', label: 'Keyboard shortcuts', icon: 'keyboard', hint: '?', run: showKeysSheet }
+    ];
+    for (const [value, label, ic] of [['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['system', 'System', 'monitor']]) {
+      if ((s.theme || 'system') === value) continue;
+      cmds.push({
+        group: 'Commands',
+        label: `Theme: ${label}`,
+        icon: ic,
+        run: async () => {
+          if (await saveSettings({ theme: value })) await reload();
+        }
+      });
+    }
+    return cmds;
+  }
+
+  function paletteResults(query) {
+    const terms = fold(query).split(/\s+/).filter(Boolean);
+    const matches = (text) => {
+      const hay = fold(text);
+      return terms.every((t) => hay.includes(t));
+    };
+    const score = (text) => (terms.length && fold(text).startsWith(terms[0]) ? 0 : 1);
+    const wsName = (id) => (state.workspaces.find((w) => w.id === id) || {}).name || '';
+    const noteItem = (n) => ({
+      group: 'Notes',
+      label: n.title || 'Untitled',
+      tint: colorOf(n.color).hex,
+      hint: n.workspaceId === state.activeWorkspaceId ? (n.visible ? 'On screen' : '') : wsName(n.workspaceId),
+      run: () => openNote(n)
+    });
+    let notes;
+    if (!terms.length) {
+      const byId = new Map(state.allNotes.map((n) => [n.id, n]));
+      notes = state.recent.map((r) => byId.get(r.id) || r).slice(0, 5);
+    } else {
+      notes = state.allNotes
+        .filter((n) => matches([n.title, ...(n.tags || []).map((t) => `#${t}`), n.content].join('\n')))
+        .sort((a, b) => score(a.title || '') - score(b.title || ''))
+        .slice(0, 8);
+    }
+    const workspaces = state.workspaces
+      .filter((w) => !terms.length || matches(w.name))
+      .map((w) => ({
+        group: 'Workspaces',
+        label: w.name,
+        badge: { hue: workspaceHue(w), text: initialOf(w.name) },
+        hint: w.id === state.activeWorkspaceId && state.view === 'notes' ? 'Current' : 'Go to',
+        run: () => selectWorkspace(w.id)
+      }));
+    const commands = paletteCommands()
+      .filter((c) => !terms.length || matches(c.label))
+      .sort((a, b) => score(a.label) - score(b.label));
+    return [
+      ...notes.map(noteItem),
+      ...workspaces,
+      ...commands
+    ];
+  }
+
+  function renderPalette() {
+    const query = els.cmdkInput.value;
+    palette.items = paletteResults(query);
+    palette.index = Math.min(palette.index, Math.max(0, palette.items.length - 1));
+    const terms = fold(query).split(/\s+/).filter(Boolean);
+    const nodes = [];
+    let group = null;
+    palette.items.forEach((item, i) => {
+      if (item.group !== group) {
+        group = item.group;
+        nodes.push(el('div', { class: 'cmdk-group', role: 'presentation', text: group === 'Notes' && !query.trim() ? 'Recent notes' : group }));
+      }
+      const lead = item.tint
+        ? el('span', { class: 'cmdk-paper', style: `--tint:${item.tint}`, 'aria-hidden': 'true' })
+        : item.badge
+          ? el('span', { class: 'ws-badge', style: `--ws-hue:${item.badge.hue}`, 'aria-hidden': 'true', text: item.badge.text })
+          : el('span', { class: 'cmdk-icon', 'aria-hidden': 'true' }, [icon(item.icon || 'arrow-right')]);
+      const label = el('span', { class: 'cmdk-label', text: item.label });
+      highlight(label, terms);
+      const option = el(
+        'div',
+        {
+          class: 'cmdk-item',
+          id: `cmdk-opt-${i}`,
+          role: 'option',
+          'aria-selected': String(i === palette.index),
+          'data-index': String(i),
+          onmousemove: () => {
+            if (palette.index !== i) setPaletteIndex(i);
+          },
+          onclick: () => choosePalette(i)
+        },
+        [lead, label, ...(item.hint ? [el('span', { class: 'cmdk-hint', text: item.hint })] : []), el('span', { class: 'cmdk-enter', 'aria-hidden': 'true' }, [icon('corner-down-left')])]
+      );
+      nodes.push(option);
+    });
+    if (!palette.items.length) {
+      nodes.push(el('div', { class: 'cmdk-empty', role: 'presentation', text: `Nothing matches “${query.trim()}”.` }));
+    }
+    els.cmdkList.replaceChildren(...nodes);
+    els.cmdkInput.setAttribute('aria-activedescendant', palette.items.length ? `cmdk-opt-${palette.index}` : '');
+  }
+
+  function setPaletteIndex(i) {
+    palette.index = i;
+    for (const node of els.cmdkList.querySelectorAll('.cmdk-item')) {
+      node.setAttribute('aria-selected', String(Number(node.dataset.index) === i));
+    }
+    els.cmdkInput.setAttribute('aria-activedescendant', `cmdk-opt-${i}`);
+    const active = els.cmdkList.querySelector(`#cmdk-opt-${i}`);
+    if (active) active.scrollIntoView({ block: 'nearest' });
+  }
+
+  function openPalette() {
+    if (!els.cmdk.classList.contains('hidden')) return;
+    closeMenu();
+    palette.lastFocus = document.activeElement;
+    palette.index = 0;
+    els.cmdkInput.value = '';
+    els.cmdk.classList.remove('hidden');
+    renderPalette();
+    els.cmdkInput.focus();
+  }
+
+  function closePalette({ restoreFocus = true } = {}) {
+    if (els.cmdk.classList.contains('hidden')) return;
+    els.cmdk.classList.add('hidden');
+    if (restoreFocus && palette.lastFocus && palette.lastFocus.isConnected) palette.lastFocus.focus();
+  }
+
+  function choosePalette(i) {
+    const item = palette.items[i];
+    if (!item) return;
+    closePalette({ restoreFocus: true });
+    Promise.resolve()
+      .then(item.run)
+      .catch((err) => showActionError('Could not do that', err));
+  }
+
+  els.cmdkInput.addEventListener('input', () => {
+    palette.index = 0;
+    renderPalette();
+  });
+  els.cmdkInput.addEventListener('keydown', (e) => {
+    const n = palette.items.length;
+    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n')) {
+      e.preventDefault();
+      if (n) setPaletteIndex((palette.index + 1) % n);
+    } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p')) {
+      e.preventDefault();
+      if (n) setPaletteIndex((palette.index - 1 + n) % n);
+    } else if (e.key === 'Home' && n && !els.cmdkInput.value) {
+      e.preventDefault();
+      setPaletteIndex(0);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      choosePalette(palette.index);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closePalette();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+    }
+  });
+  els.cmdk.addEventListener('mousedown', (e) => {
+    if (e.target === els.cmdk) {
+      e.preventDefault();
+      closePalette();
+    }
+  });
+  els.btnQuickFind.addEventListener('click', openPalette);
 
   els.btnNewNote.addEventListener('click', () => createNote('blank'));
   els.btnEmptyNew.addEventListener('click', () => createNote('blank'));
@@ -2435,6 +2675,8 @@
     els.btnBoard.setAttribute('aria-pressed', String(state.layout === 'board'));
     els.btnList.setAttribute('aria-pressed', String(state.layout === 'list'));
     els.searchHint.textContent = '/';
+    els.quickFindKey.textContent = isMac() ? '⌘K' : 'Ctrl K';
+    els.btnQuickFind.title = `Quick find (${modLabel()}K)`;
     await reload();
     els.search.focus();
   }

@@ -153,4 +153,60 @@ describe('finding notes in the manager', () => {
     await waitForStore(ctx.dataFile, (s) => s.notes.find((n) => n.id === id)?.pinned === true, 'pinned again');
     await waitFor(async () => (await onTop()) === true, 'window on top again');
   });
+
+  it('Quick find (Ctrl/Cmd+K) jumps to notes, workspaces, and commands from the keyboard', async () => {
+    const ctx = await start();
+    const { manager } = ctx;
+    const cmdk = manager.locator('#cmdk');
+    const open = async () => {
+      await manager.keyboard.press(`${modKey}+K`);
+      await waitFor(async () => !(await cmdk.evaluate((n) => n.classList.contains('hidden'))), 'quick find open');
+      assert.equal(await manager.evaluate(() => document.activeElement.id), 'cmdkInput');
+    };
+    const closed = () => cmdk.evaluate((n) => n.classList.contains('hidden'));
+
+    // Empty, it lists recent notes; Escape closes it.
+    await open();
+    assert.ok((await manager.locator('#cmdkList .cmdk-item').count()) >= 4);
+    assert.equal(await manager.locator('#cmdkList .cmdk-item').first().getAttribute('aria-selected'), 'true');
+    await manager.keyboard.press('Escape');
+    await waitFor(closed, 'closed by Escape');
+
+    // A command: switch the layout to the board.
+    await open();
+    await manager.keyboard.type('board view');
+    await waitFor(async () => (await manager.locator('#cmdkList .cmdk-item[aria-selected="true"] .cmdk-label').textContent()).toLowerCase().includes('board'), 'board command');
+    await manager.keyboard.press('Enter');
+    await waitFor(async () => manager.locator('#noteList').evaluate((n) => n.classList.contains('board')), 'board layout');
+    assert.equal(await closed(), true);
+
+    // A workspace: go to it.
+    const ws = await manager.evaluate(() => window.ghostManager.createWorkspace('Errands'));
+    await waitFor(async () => (await manager.locator('.ws-badge').count()) >= 2, 'workspace listed');
+    await open();
+    await manager.keyboard.type('errands');
+    await waitFor(async () => (await manager.locator('#cmdkList .cmdk-item').count()) >= 1, 'workspace result');
+    await manager.keyboard.press('Enter');
+    await waitFor(async () => (await manager.locator('#viewTitle').textContent()) === 'Errands', 'switched workspace');
+    assert.ok(ws);
+
+    // A note from another workspace: arrow keys move, Enter opens it on screen.
+    await open();
+    await manager.keyboard.type('pancak');
+    await waitFor(async () => (await manager.locator('#cmdkList .cmdk-item').count()) >= 1, 'note result');
+    assert.match(await manager.locator('#cmdkList .cmdk-item').first().textContent(), /Pancakes/);
+    await manager.keyboard.press('ArrowDown');
+    await manager.keyboard.press('ArrowUp');
+    await manager.keyboard.press('Enter');
+    await waitForStore(ctx.dataFile, (s) => s.notes.find((n) => n.title === 'Pancakes')?.visible === true, 'note shown');
+
+    // Nothing matches: says so, and Enter does nothing.
+    await open();
+    await manager.keyboard.type('zzzz nothing');
+    await waitFor(async () => (await manager.locator('#cmdkList .cmdk-empty').count()) === 1, 'no results');
+    await manager.keyboard.press('Enter');
+    assert.equal(await closed(), false);
+    await manager.keyboard.press('Escape');
+    await waitFor(closed, 'closed again');
+  });
 });

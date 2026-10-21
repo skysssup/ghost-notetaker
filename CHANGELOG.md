@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **New look: Ember.** A new ember-colored app icon and brand color, Instrument Sans and Instrument Serif type, an inset main panel over a warm sidebar, richer paper colors, tactile board cards that lift on hover, and a ghost badge on notes that are on screen. Dark mode draws board cards as tinted glass. Settings has colored icons, grouped rows, theme previews, and new switches. Note windows get a paper sheen, an ember ghost button in click-through, and brand-colored switches.
+
+### Added
+
+- **Quick find** (⌘K / Ctrl+K in the Notes Manager) finds notes in every workspace, switches workspaces, and runs commands from the keyboard.
+- Illustrated empty states, workspace badges, and tag counts in the sidebar.
+
 ## [1.7.0] - 2026-10-04
 
 ### Changed

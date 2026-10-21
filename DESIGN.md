@@ -1,58 +1,59 @@
 # Design
 
-How the Notes Manager and Settings look, and why. Note windows keep their own look (Inter, the paper colors, the toolbar); this document covers the window that manages them.
+How Ghost Notetaker looks, and why: the note windows, the Notes Manager, and Settings share one system.
 
 ## The product, briefly
 
-Ghost Notetaker is sticky notes that float over the desktop, can turn see-through or click-through, and stay out of screen shares. The Notes Manager is where you go back to them: find a note, file it in a workspace, put it on screen or take it off. People open it for a few seconds at a time, often while sharing a screen, so it should be **tactile, quiet, discreet, and orderly**.
+Ghost Notetaker is sticky notes that float over the desktop, can turn see-through or click-through, and stay out of screen shares. The Notes Manager is where you go back to them: find a note, file it in a workspace, put it on screen or take it off. People open it for a few seconds at a time, often while sharing a screen, so it should feel **fast, crafted, calm, and confident** — the polish of a paid Mac app, not a utility.
 
-## Direction: a desk
+## References
 
-The notes are paper, so the manager is the desk they live on.
+Before this direction we screenshotted and studied Craft, Bear, Things, Raycast, Linear, and Reflect. What they share, and what we took:
 
-- **Binder.** The sidebar is a cloth binder in the deep teal of the app's ghost mark. The active workspace is a folder tab: it takes the desk's color and joins the desk with curved inner corners, so the page you are reading is visibly the one that is open.
-- **Blotter.** The main area is a soft green-grey desk blotter. Paper sits on it; nothing else needs a card.
-- **Paper.** Notes are drawn as paper in their own colors, at rest with a short contact shadow. Dark papers (Charcoal, Ink) are drawn dark with light ink.
-- **Signature: taped up.** A note that is on screen right now is taped to the desk — a strip of washi tape with torn ends across its top edge and a slightly lifted shadow. You can tell what is on your screen from across the room, without a badge.
-- **Highlighter.** Search hits are marked with a yellow highlighter stroke, in titles and in snippets.
-- **Paper chips.** The color filter is a row of tiny paper squares with a folded corner, one per paper color, rather than generic dots.
+- **Layered surfaces.** Craft and Linear put content on an inset panel that floats above a tinted canvas/sidebar, separated by a hairline and a soft shadow rather than a divider. We do the same; on macOS the sidebar is the window's vibrancy.
+- **One confident brand color, tinted neutrals.** Raycast's red and Bear's red are used sparingly on a neutral base that is warm, not grey. Ours is *ember* (oklch 0.66 0.19 40) on stone neutrals (hue 60–70). No purple, no rainbow gradients.
+- **Glossy, tactile controls.** Raycast's buttons have a 1px top highlight and a gradient; primary buttons, the selected settings item, switches, and menu highlights use the brand gradient with that highlight.
+- **Color as wayfinding.** Things gives every sidebar item a colored icon; macOS System Settings gives every pane an icon tile. Workspaces get a colored initial badge, settings panes get colored tiles, tags get a counted `#` tile.
+- **Content you can feel.** Craft's cards are vivid pastels with generous radius and soft, layered shadows. Our board cards are paper in richer pastels, radius 14, with a sheen and a contact shadow; they lift on hover with a spring and settle on press.
+- **Keyboard first.** Raycast and Linear live in a command palette. **Quick find** (⌘K / Ctrl+K) searches notes across workspaces, switches workspaces, and runs commands.
+- **Illustrated empty states.** An empty workspace shows two papers and the ghost floating beside them (a lens when a filter is on), not a sentence on a blank page.
+
+## Direction: Ember
+
+- **Brand mark.** The app icon is an ember-gradient squircle (#f88a3d → #ee5e23 → #cc3719) with a soft inner glow and a warm-white ghost. The same mark appears in the sidebar and in Quick find.
+- **On screen = a ghost sticker.** A note that is on screen right now wears a small ember ghost badge on its corner and a breathing ember dot ("On screen"). You can see what is on your desktop at a glance.
+- **Dark mode is its own material.** Board cards become tinted glass — the paper color mixed into a dark surface with a lit top edge — so the board keeps its color without glaring at night. Menus, Quick find, and the note appearance panel are blurred glass in both themes.
+- **Settings like System Settings.** A rail of colored icon tiles, grouped rounded rows on a slightly darker panel, theme preview cards, and brand switches with a springy knob.
+- **Note windows.** Paper with a top sheen and lit edge, a title that is always visible, and a glass capsule of controls that springs in on hover. Click-through shows the ghost button in ember so it is clear why clicks pass through. Switches, the selected swatch, and the text caret use the brand color.
 
 ## Type
 
-| Role | Font | Use |
+| Role | Font | Used for |
 | --- | --- | --- |
-| Labels | Young Serif (regular) | The wordmark, page titles, section labels in the binder, dialog titles, empty-state titles |
-| UI | Libre Franklin (variable) | Everything else: note titles and previews, controls, meta, settings |
-| Code | iA Writer Mono (shared with note windows) | Code in previews, key caps where useful |
+| UI and notes | Instrument Sans (variable 400–700) | Everything: controls, note titles, note text, settings |
+| Display | Instrument Serif (regular) | Page titles ("Personal", "Settings", "Trash") and empty-state titles |
+| Mono | iA Writer Mono | Monospace notes and code |
 
-Both are self-hosted WOFF2 (latin and latin-ext) in `renderer/fonts/`; nothing is fetched at run time. Young Serif is a soft, ink-trap-free display serif that reads like the label on a file folder; Libre Franklin is a sturdy American gothic that stays legible at 12–13 px on low-DPI Windows screens.
-
-Scale: 1.2 ratio from a 13 px base — `--fs-cap` 11.5, `--fs-sm` 12, `--fs-base` 13, `--fs-md` 15.5, `--fs-lg` 18.5, `--fs-xl` 22.5, `--fs-2xl` 27.
+All are self-hosted WOFF2/TTF in `renderer/fonts/`; nothing is fetched at run time. **Why Instrument Sans:** a contemporary grotesk with slightly condensed, crisp letterforms and open apertures; it stays legible at 12–14 px on low-DPI Windows screens, has real italics for Markdown, and looks distinct from the Inter/system default every other app ships. **Why Instrument Serif:** a condensed editorial display serif that gives page titles a magazine-like voice at 30–36 px, the one place we allow personality in type. Scale: 11 / 12 / 13 / 14 / 16 / 20 / 28 / 36 px.
 
 ## Tokens
 
-All tokens live in [`renderer/manager/tokens.css`](renderer/manager/tokens.css), in OKLCH, loaded after the shared tokens. The rest of the manager CSS uses only these names.
+All tokens are in `renderer/shared/tokens.css` and used by every window.
 
-- **Surfaces:** `--desk`, `--desk-deep`, `--surface` (inputs, settings panels), `--binder`, `--binder-raised`.
-- **Ink:** `--ink`, `--ink-2`, `--ink-3` on the desk; `--binder-ink`, `--binder-muted` on the binder. Rules and washes are ink at low alpha (`--rule`, `--rule-strong`, `--wash`, `--wash-strong`), so they work on any paper.
-- **Accent:** `--accent` is the binder teal (light) or a pale sage (dark). It is used for the primary button, the selected state, and focus. There is one accent. The OS accent color is not used in the manager.
-- **Signals:** `--marker` (highlighter), `--danger`, `--tape`.
-- **Space:** 4 px steps, `--s1`…`--s7` (4, 8, 12, 16, 24, 32, 48).
-- **Radii:** `--r-paper` 7 px for paper and panels, `--r-ctl` 5 px for controls, `--r-pill` for counts and chips.
-- **Shadow:** one family — `--paper-rest` and `--paper-lift`. Menus and dialogs use `--paper-lift`. No blur or glass.
-- **Motion:** `--t-quick` 110 ms, `--t-move` 180 ms, one ease-out curve. Everything is off under `prefers-reduced-motion`.
+- **Brand:** `--brand`, `--brand-solid` (buttons, ~4.7:1 with white text), `--brand-gradient`, `--brand-wash`, `--focus`.
+- **Surfaces, back to front:** `--canvas` (sidebar) → `--panel` (inset main panel) → `--surface` (groups, cards) → `--raised` (menus, dialogs) → `--glass` (blurred overlays). Dark mode raises each step by about 2–3% lightness instead of adding borders.
+- **Lines:** `--hairline`, `--hairline-strong`; 1px top highlights use `--highlight`.
+- **Radii:** 6 / 8 / 12 / 16 / pill. **Shadows:** `--shadow-control`, `-1`, `-2`, `-lift`, `-menu`, `-dialog`, `-note`.
+- **Motion:** `--ease-out`, `--spring` (a slight overshoot), 120 / 200 / 260 ms.
 
-Contrast (WCAG 2): body ink on the desk is 12.8:1 light / 13.9:1 dark; the faintest meta text (`--ink-3`) is 5.0:1 / 6.7:1; muted binder text is 5.9:1 / 8.3:1. `prefers-contrast: more` darkens rules and ink further, and `forced-colors` falls back to system colors with visible outlines.
+## Motion
+
+Cards rise in with a short stagger when the layout or the workspace changes; cards lift on hover and press in; menus, dialogs, and Quick find scale in with the spring; switches and swatches spring; the empty-state ghost bobs. With **Reduce motion** on, every animation and transition is cut to a single frame and nothing moves on hover.
 
 ## Rules
 
-- **Focus** is a 2 px ring in `--focus` with a 2 px offset; on the binder it switches to `--focus-on-binder`, a legal-pad yellow that reads on teal. Paper cards get the ring outside their edge so it never sits on the paper color.
-- **Selection** is a checkbox and a wash in the list, and an ink outline around the paper on the board — never a recolored paper. The selection bar takes the binder's color so it reads as part of the furniture.
-- **Empty, loading and error states are real:** a dashed taped-up paper outline with a title, a sentence that says what to do, and a button (New note, or Clear filters); a skeleton of paper shapes while the list loads; an inline error with Retry if the list cannot be read.
-- **Icons** are Lucide at 1.5 stroke, 16 px, in `currentColor`. No emoji.
-- **Responsive:** the board flows from one to four columns of paper; under 1000 px the sidebar narrows from 228 to 200 px, the list drops its tag column, and the settings rail tightens; the window's minimum width is 820 px.
-- **Dark theme** is the same desk at night: a dark green-black blotter, near-black binder, and the papers dimmed but still recognizable.
-
-## What we avoided
-
-Checked against the frontend-design de-slop list: no Inter in the manager, no indigo/violet focus rings or purple gradients, no frosted-glass blur, no emoji icons, no card-in-card, no Notion-style blank white page. The automated scan of `manager.html` reports only "no focus styles", which is a false positive — the focus styles are in the linked stylesheets.
+- One accent: ember. Everything else is stone neutrals or the note's own paper.
+- Depth comes from surfaces and shadows, not from borders around everything.
+- Every interactive element has a hover, a press, and a visible focus ring (`--focus`).
+- Text meets WCAG AA on every paper and surface; increased contrast strengthens text and edges; reduced transparency makes glass solid; forced colors keeps outlines.
+- Keep ids and roles stable: the end-to-end tests drive the UI by them.

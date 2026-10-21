@@ -1,18 +1,65 @@
-/* Ghost Notetaker design tokens, shared by the note window and the Notes Manager.
-   Warm neutrals, paper-stock note colors, and one accent that marks focus and selection. */
+/* Ghost Notetaker design tokens, shared by the note windows and the Notes Manager.
+   Warm stone neutrals, paper-stock note colors, and one brand color, Ember, that marks
+   the brand, the primary action, focus, and selection. The rules are in DESIGN.md. */
 
 @font-face {
-  font-family: 'Inter Variable';
-  src: url('../fonts/InterVariable.woff2') format('woff2');
-  font-weight: 100 900;
+  font-family: 'Instrument Sans';
+  src: url('../fonts/InstrumentSans-Variable-latin.woff2') format('woff2');
+  font-weight: 400 700;
   font-style: normal;
   font-display: block;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: 'Inter Variable';
-  src: url('../fonts/InterVariable-Italic.woff2') format('woff2');
-  font-weight: 100 900;
+  font-family: 'Instrument Sans';
+  src: url('../fonts/InstrumentSans-Variable-latin-ext.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('../fonts/InstrumentSans-Variable-Italic-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: block;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('../fonts/InstrumentSans-Variable-Italic-latin-ext.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: block;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('../fonts/InstrumentSerif-Regular-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('../fonts/InstrumentSerif-Regular-latin-ext.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('../fonts/InstrumentSerif-Italic-latin.woff2') format('woff2');
+  font-weight: 400;
   font-style: italic;
   font-display: block;
 }
@@ -36,121 +83,173 @@
 :root {
   color-scheme: light;
 
-  --font-ui: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  /* ---- type ---- */
+  --font-ui: 'Instrument Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
   --font-content: var(--font-ui);
   --font-mono: 'iA Writer Mono V', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --canvas: #fbfaf8;
-  --sidebar: #f3f1ed;
-  --surface: #ffffff;
-  --raised: #ffffff;
-  --control: #ffffff;
-  --glass: rgba(255, 255, 255, 0.8);
-  --hairline: rgba(28, 25, 20, 0.08);
-  --hairline-strong: rgba(28, 25, 20, 0.14);
-  --swatch-edge: rgba(28, 25, 20, 0.14);
-  --text: #1c1a17;
-  --text-secondary: #5e5952;
-  --text-tertiary: #6f6a62;
-  --fill: rgba(28, 25, 20, 0.045);
-  --fill-strong: rgba(28, 25, 20, 0.08);
-  --ink-bg: #1c1a17;
-  --ink-fg: #fbfaf8;
-  --scrim: rgba(28, 25, 20, 0.28);
+  --fs-cap: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 36px;
 
-  /* The OS accent replaces --accent at startup; Linux keeps this blue. It marks focus, selection, and links. */
-  --accent: #3a6bc4;
-  --accent-text: oklch(from var(--accent) min(l, 0.5) c h);
-  --accent-fill: rgb(from var(--accent) r g b / 0.1);
-  --accent-ring: rgb(from var(--accent) r g b / 0.3);
-  --danger: #bd3f3a;
-  --danger-solid: #bd3f3a;
-  --danger-fill: rgb(from var(--danger) r g b / 0.08);
-  --on-screen: #3a8f5c;
+  /* ---- space: 4px steps ---- */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  /* ---- brand: Ember ---- */
+  --brand: oklch(0.66 0.19 40);
+  --brand-hi: oklch(0.74 0.16 52);
+  --brand-solid: oklch(0.585 0.19 36);
+  --brand-deep: oklch(0.52 0.18 33);
+  --brand-text: oklch(0.52 0.17 35);
+  --brand-on: #fff;
+  --brand-wash: oklch(0.66 0.19 40 / 0.1);
+  --brand-wash-strong: oklch(0.66 0.19 40 / 0.17);
+  --brand-gradient: linear-gradient(180deg, oklch(0.615 0.19 38), oklch(0.56 0.19 34));
+
+  /* ---- stone neutrals (hue 60) ---- */
+  --canvas: oklch(0.958 0.005 70);
+  --sidebar: var(--canvas);
+  --panel: oklch(0.993 0.002 70);
+  --panel-2: oklch(0.975 0.004 70);
+  --surface: #fff;
+  --raised: #fff;
+  --control: #fff;
+  --glass: oklch(0.995 0.003 70 / 0.82);
+  --hairline: oklch(0.25 0.012 55 / 0.085);
+  --hairline-strong: oklch(0.25 0.012 55 / 0.15);
+  --swatch-edge: oklch(0.25 0.012 55 / 0.16);
+  --text: oklch(0.22 0.01 50);
+  --text-secondary: oklch(0.44 0.012 55);
+  --text-tertiary: oklch(0.53 0.012 60);
+  --fill: oklch(0.25 0.012 55 / 0.045);
+  --fill-strong: oklch(0.25 0.012 55 / 0.08);
+  --ink-bg: oklch(0.22 0.01 50);
+  --ink-fg: oklch(0.98 0.004 70);
+  --scrim: oklch(0.2 0.01 50 / 0.32);
+  --highlight: oklch(1 0 0 / 0.75);
+
+  --accent: var(--brand-solid);
+  --accent-text: var(--brand-text);
+  --accent-fill: var(--brand-wash);
+  --accent-ring: oklch(0.66 0.19 40 / 0.28);
+  --focus: oklch(0.62 0.19 38);
+  --marker: oklch(0.9 0.16 98 / 0.8);
+  --danger: oklch(0.53 0.19 25);
+  --danger-solid: oklch(0.55 0.2 25);
+  --danger-fill: oklch(0.55 0.2 25 / 0.09);
+  --on-screen: var(--brand);
 
   --paper-ink: #1f1d1a;
   --paper-ink-secondary: rgba(31, 29, 26, 0.68);
   --paper-ink-light: #f3f1ec;
-  --paper-ink-light-secondary: rgba(243, 241, 236, 0.66);
+  --paper-ink-light-secondary: rgba(243, 241, 236, 0.68);
 
+  /* ---- shape ---- */
   --r-1: 6px;
-  --r-2: 9px;
-  --r-3: 14px;
-  --r-4: 20px;
+  --r-2: 8px;
+  --r-3: 12px;
+  --r-4: 16px;
   --r-pill: 999px;
 
-  --shadow-control: 0 1px 2px rgba(28, 25, 20, 0.06);
-  --shadow-lift: 0 1px 2px rgba(28, 25, 20, 0.05), 0 12px 28px -10px rgba(28, 25, 20, 0.2);
-  --shadow-menu: 0 0 0 0.5px rgba(28, 25, 20, 0.14), 0 2px 6px rgba(28, 25, 20, 0.06), 0 18px 40px -12px rgba(28, 25, 20, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  --shadow-dialog: 0 0 0 0.5px rgba(28, 25, 20, 0.12), 0 32px 80px -20px rgba(28, 25, 20, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  --shadow-note: 0 0 0 0.5px rgba(0, 0, 0, 0.13), 0 1px 2px rgba(0, 0, 0, 0.07), 0 6px 14px -4px rgba(0, 0, 0, 0.12),
-    0 16px 28px -10px rgba(0, 0, 0, 0.26);
+  /* ---- elevation: a hairline, a contact shadow, and an ambient shadow; lit from above ---- */
+  --shadow-control: 0 0 0 0.5px oklch(0.25 0.02 50 / 0.14), 0 1px 2px oklch(0.25 0.02 50 / 0.08), inset 0 1px 0 var(--highlight);
+  --shadow-1: 0 0 0 0.5px oklch(0.25 0.02 50 / 0.1), 0 1px 2px oklch(0.25 0.02 50 / 0.06), 0 2px 6px -2px oklch(0.25 0.02 50 / 0.08);
+  --shadow-2: 0 0 0 0.5px oklch(0.25 0.02 50 / 0.1), 0 2px 4px oklch(0.25 0.02 50 / 0.05), 0 14px 30px -12px oklch(0.25 0.02 50 / 0.28);
+  --shadow-lift: var(--shadow-2);
+  --shadow-menu: 0 0 0 0.5px oklch(0.25 0.02 50 / 0.16), 0 4px 10px -2px oklch(0.25 0.02 50 / 0.08), 0 22px 48px -14px oklch(0.25 0.02 50 / 0.3),
+    inset 0 1px 0 var(--highlight);
+  --shadow-dialog: 0 0 0 0.5px oklch(0.25 0.02 50 / 0.14), 0 40px 90px -24px oklch(0.25 0.02 50 / 0.45), inset 0 1px 0 var(--highlight);
+  --shadow-note: 0 0 0 0.5px rgba(40, 24, 10, 0.14), 0 1px 2px rgba(40, 24, 10, 0.07), 0 6px 14px -4px rgba(40, 24, 10, 0.12),
+    0 18px 30px -10px rgba(40, 24, 10, 0.28);
 
+  /* ---- motion ---- */
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --t-fast: 120ms;
-  --t-panel: 180ms;
-  --t-morph: 240ms;
+  --t-quick: 120ms;
+  --t-panel: 200ms;
+  --t-move: 260ms;
+  --t-morph: 260ms;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: #191816;
-  --sidebar: #141312;
-  --surface: #201f1d;
-  --raised: #282724;
-  --control: #2c2b28;
-  --glass: rgba(44, 43, 40, 0.78);
-  --hairline: rgba(255, 250, 240, 0.08);
-  --hairline-strong: rgba(255, 250, 240, 0.14);
-  --swatch-edge: rgba(255, 250, 240, 0.28);
-  --text: #edeae4;
-  --text-secondary: #b5b0a8;
-  --text-tertiary: #9a958d;
-  --fill: rgba(255, 250, 240, 0.05);
-  --fill-strong: rgba(255, 250, 240, 0.09);
-  --ink-bg: #edeae4;
-  --ink-fg: #191816;
-  --scrim: rgba(0, 0, 0, 0.5);
+  --brand: oklch(0.7 0.17 44);
+  --brand-text: oklch(0.78 0.13 50);
+  --brand-wash: oklch(0.7 0.17 44 / 0.15);
+  --brand-wash-strong: oklch(0.7 0.17 44 / 0.24);
 
-  --accent-text: oklch(from var(--accent) max(l, 0.75) c h);
-  --accent-fill: rgb(from var(--accent) r g b / 0.2);
-  --accent-ring: rgb(from var(--accent) r g b / 0.42);
-  --danger: #f08580;
-  --danger-solid: #b93c37;
-  --danger-fill: rgb(from var(--danger) r g b / 0.14);
-  --on-screen: #5cbf85;
+  --canvas: oklch(0.165 0.005 60);
+  --panel: oklch(0.2 0.006 60);
+  --panel-2: oklch(0.183 0.005 60);
+  --surface: oklch(0.235 0.007 60);
+  --raised: oklch(0.255 0.007 60);
+  --control: oklch(0.27 0.007 60);
+  --glass: oklch(0.26 0.007 60 / 0.82);
+  --hairline: oklch(0.97 0.01 70 / 0.075);
+  --hairline-strong: oklch(0.97 0.01 70 / 0.13);
+  --swatch-edge: oklch(0.97 0.01 70 / 0.26);
+  --text: oklch(0.95 0.006 70);
+  --text-secondary: oklch(0.77 0.008 70);
+  --text-tertiary: oklch(0.64 0.008 70);
+  --fill: oklch(0.97 0.01 70 / 0.05);
+  --fill-strong: oklch(0.97 0.01 70 / 0.09);
+  --ink-bg: oklch(0.95 0.006 70);
+  --ink-fg: oklch(0.18 0.005 60);
+  --scrim: oklch(0.08 0.005 60 / 0.6);
+  --highlight: oklch(1 0 0 / 0.07);
 
-  --shadow-control: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-lift: 0 14px 30px -12px rgba(0, 0, 0, 0.75);
-  --shadow-menu: 0 0 0 0.5px rgba(255, 250, 240, 0.12), 0 18px 44px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --shadow-dialog: 0 0 0 0.5px rgba(255, 250, 240, 0.12), 0 32px 84px -16px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --accent-ring: oklch(0.7 0.17 44 / 0.4);
+  --focus: oklch(0.74 0.15 48);
+  --marker: oklch(0.86 0.15 98 / 0.55);
+  --danger: oklch(0.74 0.14 25);
+  --danger-solid: oklch(0.56 0.19 25);
+  --danger-fill: oklch(0.74 0.14 25 / 0.14);
+
+  --shadow-control: 0 0 0 0.5px oklch(0 0 0 / 0.5), 0 1px 2px oklch(0 0 0 / 0.3), inset 0 1px 0 var(--highlight);
+  --shadow-1: 0 0 0 0.5px oklch(0 0 0 / 0.55), 0 1px 2px oklch(0 0 0 / 0.3), inset 0 1px 0 var(--highlight);
+  --shadow-2: 0 0 0 0.5px oklch(0 0 0 / 0.6), 0 2px 4px oklch(0 0 0 / 0.25), 0 18px 36px -12px oklch(0 0 0 / 0.65), inset 0 1px 0 var(--highlight);
+  --shadow-menu: 0 0 0 0.5px oklch(0 0 0 / 0.7), 0 0 0 1px oklch(1 0 0 / 0.05) inset, 0 24px 50px -12px oklch(0 0 0 / 0.7),
+    inset 0 1px 0 oklch(1 0 0 / 0.08);
+  --shadow-dialog: 0 0 0 0.5px oklch(0 0 0 / 0.7), 0 40px 90px -20px oklch(0 0 0 / 0.8), inset 0 1px 0 oklch(1 0 0 / 0.08);
 }
 
 /* More contrast when the system asks for it. */
 @media (prefers-contrast: more) {
   :root {
-    --hairline: rgba(28, 25, 20, 0.2);
-    --hairline-strong: rgba(28, 25, 20, 0.38);
-    --swatch-edge: rgba(28, 25, 20, 0.38);
-    --fill: rgba(28, 25, 20, 0.07);
-    --fill-strong: rgba(28, 25, 20, 0.12);
-    --text-secondary: #3e3a35;
-    --text-tertiary: #504b45;
+    --hairline: oklch(0.25 0.012 55 / 0.22);
+    --hairline-strong: oklch(0.25 0.012 55 / 0.4);
+    --swatch-edge: oklch(0.25 0.012 55 / 0.4);
+    --fill: oklch(0.25 0.012 55 / 0.07);
+    --fill-strong: oklch(0.25 0.012 55 / 0.12);
+    --text-secondary: oklch(0.34 0.012 55);
+    --text-tertiary: oklch(0.4 0.012 55);
     --paper-ink-secondary: rgba(31, 29, 26, 0.84);
     --paper-ink-light-secondary: rgba(243, 241, 236, 0.88);
   }
 
   :root[data-theme='dark'] {
-    --hairline: rgba(255, 250, 240, 0.22);
-    --hairline-strong: rgba(255, 250, 240, 0.4);
-    --swatch-edge: rgba(255, 250, 240, 0.5);
-    --fill: rgba(255, 250, 240, 0.09);
-    --fill-strong: rgba(255, 250, 240, 0.14);
-    --text-secondary: #d6d2cb;
-    --text-tertiary: #bab5ad;
+    --hairline: oklch(0.97 0.01 70 / 0.24);
+    --hairline-strong: oklch(0.97 0.01 70 / 0.4);
+    --swatch-edge: oklch(0.97 0.01 70 / 0.5);
+    --fill: oklch(0.97 0.01 70 / 0.09);
+    --fill-strong: oklch(0.97 0.01 70 / 0.14);
+    --text-secondary: oklch(0.86 0.008 70);
+    --text-tertiary: oklch(0.78 0.008 70);
   }
 }
 
@@ -165,7 +264,9 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --t-fast: 0ms;
+    --t-quick: 0ms;
     --t-panel: 0ms;
+    --t-move: 0ms;
     --t-morph: 0ms;
   }
 }

@@ -726,7 +726,6 @@
   async function init() {
     const boot = await window.ghostNote.getBootstrap();
     applyTheme(boot.darkMode);
-    if (boot.accentColor) document.documentElement.style.setProperty('--accent', boot.accentColor);
     colors = boot.colors || [];
     formattedWhenIdle = boot.settings.formattedWhenIdle !== false;
     buildPalette();

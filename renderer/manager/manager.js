@@ -1424,7 +1424,8 @@
           el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
           el('span', {
             class: 'trash-left',
-            text: `Deleted ${formatRelative(note.trashedAt)} · ${plural(left, 'day')} left`
+            text: `${plural(left, 'day')} left`,
+            title: `Moved to the trash ${formatRelative(note.trashedAt)}`
           }),
           el('div', { class: 'trash-actions' }, [
             el('button', {
@@ -2186,7 +2187,6 @@
     state.bootstrap = boot;
     document.documentElement.dataset.theme = boot.darkMode ? 'dark' : 'light';
     document.documentElement.dataset.platform = boot.platform;
-    if (boot.accentColor) document.documentElement.style.setProperty('--accent', boot.accentColor);
     state.workspaces = boot.workspaces;
     state.activeWorkspaceId = boot.activeWorkspaceId;
     state.allNotes = allNotes;

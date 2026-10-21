@@ -5,10 +5,10 @@ const path = require('path');
 const { BrowserWindow, nativeTheme } = require('electron');
 const { applyContentProtection, isMac, isWin } = require('./platform');
 
-/** Canvas and text colors from renderer/shared/tokens.css, for the parts of the window the OS draws. */
+/** The desk and ink colors from renderer/manager/tokens.css (--desk, --ink), for the parts of the window the OS draws. */
 const CHROME = {
-  light: { canvas: '#fbfaf8', text: '#1c1a17' },
-  dark: { canvas: '#191816', text: '#edeae4' }
+  light: { canvas: '#e1e8e2', text: '#1b2420' },
+  dark: { canvas: '#171d1b', text: '#eae8df' }
 };
 const chromeColors = () => CHROME[nativeTheme.shouldUseDarkColors ? 'dark' : 'light'];
 const isWindows11 = () => isWin() && Number(os.release().split('.')[2]) >= 22000;

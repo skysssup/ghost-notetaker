@@ -9,6 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ghost Notetaker — Notes Manager</title>
     <link rel="stylesheet" href="../shared/tokens.css" />
+    <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="manager.css" />
   </head>
   <body>
@@ -186,17 +187,19 @@
               <p class="view-sub">Changes are saved as you make them.</p>
             </div>
           </div>
-          <nav class="settings-nav" aria-label="Settings sections">
-            <a href="#setAppearance">Appearance</a>
-            <a href="#setNotes">New notes</a>
-            <a href="#setPrivacy">Privacy</a>
-            <a href="#setShortcuts">Shortcuts</a>
-            <a href="#setBackups">Backups</a>
-            <a href="#setData">Data</a>
-            <a href="#setAbout">About</a>
-          </nav>
-          <div class="scroller settings-scroller" id="settingsScroller">
-            <div id="settingsBody" class="settings-body"></div>
+          <div class="settings-layout">
+            <nav class="settings-nav" aria-label="Settings sections">
+              <a href="#setAppearance">Appearance</a>
+              <a href="#setNotes">New notes</a>
+              <a href="#setPrivacy">Privacy</a>
+              <a href="#setShortcuts">Shortcuts</a>
+              <a href="#setBackups">Backups</a>
+              <a href="#setData">Data</a>
+              <a href="#setAbout">About</a>
+            </nav>
+            <div class="scroller settings-scroller" id="settingsScroller">
+              <div id="settingsBody" class="settings-body"></div>
+            </div>
           </div>
         </section>
       </main>

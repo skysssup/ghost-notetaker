@@ -2433,3 +2433,75 @@ html[data-platform='darwin'] .sidebar-top {
     visibility: hidden;
   }
 }
+
+/* ---------- filters, search hits, loading ---------- */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 24px 12px;
+}
+
+.paper-filter {
+  display: flex;
+  gap: 6px;
+}
+
+.paper-chip {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--tint);
+  box-shadow: inset 0 0 0 1px var(--swatch-edge);
+}
+
+.paper-chip[aria-pressed='true'] {
+  box-shadow:
+    inset 0 0 0 1px var(--swatch-edge),
+    0 0 0 2px var(--canvas),
+    0 0 0 3.5px var(--text);
+}
+
+.active-tag {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+mark.hit {
+  border-radius: 2px;
+  background: rgb(255 214 64 / 0.55);
+  color: inherit;
+}
+
+.skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.skeleton-card {
+  height: 120px;
+  border-radius: var(--r-3);
+  background: var(--fill-strong);
+}
+
+.skeleton-card.tall {
+  height: 180px;
+}
+
+.list-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}

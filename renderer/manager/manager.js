@@ -22,7 +22,9 @@
     backups: [],
     activeWorkspaceId: null,
     selectedTag: null,
+    colors: new Set(),
     query: '',
+    loaded: false,
     visibility: 'all',
     sortBy: 'updated',
     layout: 'list',
@@ -46,6 +48,15 @@
     notesScroller: $('notesScroller'),
     empty: $('empty'),
     emptyTitle: $('emptyTitle'),
+    emptyHint: $('emptyHint'),
+    btnClearFilters: $('btnClearFilters'),
+    btnClearAll: $('btnClearAll'),
+    paperFilter: $('paperFilter'),
+    activeTag: $('activeTag'),
+    loading: $('loading'),
+    listError: $('listError'),
+    listErrorText: $('listErrorText'),
+    btnRetry: $('btnRetry'),
     search: $('search'),
     searchHint: $('searchHint'),
     sortBy: $('sortBy'),
@@ -157,7 +168,7 @@
   }
 
   /** Plain-text preview of a note. */
-  function snippet(note) {
+  function snippet(note, max = 300) {
     return bodyText(note)
       .replace(/```[\s\S]*?```/g, ' ')
       .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
@@ -166,7 +177,84 @@
       .replace(/[*_`[\]()>|~-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 300);
+      .slice(0, max);
+  }
+
+  // ---------- search ----------
+
+  /** Lowercase without accents; the same folding the store uses to match. */
+  function fold(text) {
+    return String(text || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  const searchTerms = () => fold(state.query).split(/\s+/).filter(Boolean);
+
+  /** Folded text plus, for each folded character, the index of the character it came from. */
+  function foldWithMap(text) {
+    let folded = '';
+    const map = [];
+    for (let i = 0; i < text.length; i++) {
+      const f = fold(text[i]);
+      folded += f;
+      for (let k = 0; k < f.length; k++) map.push(i);
+    }
+    return { folded, map };
+  }
+
+  /** [start, end) ranges of `text` that match a search word, merged and in order. */
+  function hitRanges(text, terms) {
+    if (!terms.length || !text) return [];
+    const { folded, map } = foldWithMap(text);
+    const ranges = [];
+    for (const term of terms) {
+      let at = folded.indexOf(term);
+      while (at !== -1) {
+        ranges.push([map[at], map[at + term.length - 1] + 1]);
+        at = folded.indexOf(term, at + term.length);
+      }
+    }
+    ranges.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+      else merged.push(r.slice());
+    }
+    return merged;
+  }
+
+  /** Wrap the search words inside `root` in <mark>, leaving the text itself unchanged. */
+  function highlight(root, terms) {
+    if (!terms.length) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      const ranges = hitRanges(node.nodeValue, terms);
+      if (!ranges.length) continue;
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let pos = 0;
+      for (const [a, b] of ranges) {
+        if (a > pos) frag.append(text.slice(pos, a));
+        frag.append(el('mark', { class: 'hit', text: text.slice(a, b) }));
+        pos = b;
+      }
+      if (pos < text.length) frag.append(text.slice(pos));
+      node.replaceWith(frag);
+    }
+  }
+
+  /** The preview line, starting a little before the first search hit when it is further in. */
+  function snippetFor(note, terms) {
+    const full = snippet(note, Infinity);
+    const first = hitRanges(full, terms)[0];
+    if (!first || first[0] < 60) return full.slice(0, 300);
+    const start = full.lastIndexOf(' ', first[0] - 24) + 1;
+    return `…${full.slice(start, start + 300)}`;
   }
 
   /** ipcRenderer.invoke prefixes main-process errors; show only the message. */
@@ -432,7 +520,7 @@
         {
           type: 'button',
           class: `menu-item${item.danger ? ' danger' : ''}`,
-          role: radio ? 'menuitemradio' : 'menuitem',
+          role: radio ? (item.checkbox ? 'menuitemcheckbox' : 'menuitemradio') : 'menuitem',
           'aria-checked': radio ? String(item.checked) : undefined,
           disabled: item.disabled,
           ...(item.attrs || {}),
@@ -679,18 +767,82 @@
 
   // ---------- notes view ----------
 
+  /** The same filters the store applies, except on screen / hidden, for the counts next to those buttons. */
   function matchesFilters(n) {
     if (n.workspaceId !== state.activeWorkspaceId) return false;
     if (state.selectedTag && !n.tags.some((t) => t.toLowerCase() === state.selectedTag)) return false;
-    if (state.query) {
-      const q = state.query.toLowerCase();
-      return (
-        n.title.toLowerCase().includes(q) ||
-        n.content.toLowerCase().includes(q) ||
-        n.tags.some((t) => t.toLowerCase().includes(q))
-      );
+    if (state.colors.size && !state.colors.has(n.color)) return false;
+    const terms = searchTerms();
+    if (terms.length) {
+      const haystack = fold([n.title, n.content, ...(n.tags || [])].join('\n'));
+      return terms.every((t) => haystack.includes(t));
     }
     return true;
+  }
+
+  const isFiltered = () => Boolean(state.query || state.selectedTag || state.colors.size || state.visibility !== 'all');
+
+  /** One swatch per paper used in this workspace; pressing swatches shows only notes on those papers. */
+  function renderPaperFilter(inWs) {
+    const counts = new Map();
+    for (const n of inWs) counts.set(n.color, (counts.get(n.color) || 0) + 1);
+    for (const id of [...state.colors]) if (!counts.has(id)) state.colors.delete(id);
+    const colors = ((state.bootstrap && state.bootstrap.colors) || []).filter((c) => counts.has(c.id));
+    els.paperFilter.hidden = colors.length < 2 && !state.colors.size;
+    els.paperFilter.replaceChildren(
+      ...colors.map((c) => {
+        const on = state.colors.has(c.id);
+        const count = counts.get(c.id);
+        return el('button', {
+          type: 'button',
+          class: `paper-chip${c.ink === 'light' ? ' ink-light' : ''}`,
+          'data-color': c.id,
+          'aria-pressed': String(on),
+          'aria-label': `${c.label} paper, ${plural(count, 'note')}`,
+          title: `${c.label} (${count})`,
+          style: `--tint:${c.hex}`,
+          onclick: () => toggleColor(c.id)
+        });
+      })
+    );
+  }
+
+  function renderActiveTag() {
+    els.activeTag.hidden = !state.selectedTag;
+    if (!state.selectedTag) return els.activeTag.replaceChildren();
+    els.activeTag.replaceChildren(
+      el('span', { class: 'tag-pill', text: `#${state.selectedTag}` }),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'icon-btn small',
+          'aria-label': `Stop filtering by #${state.selectedTag}`,
+          title: 'Show all tags',
+          onclick: () => setTag(null)
+        },
+        [icon('x')]
+      )
+    );
+  }
+
+  async function toggleColor(id) {
+    if (state.colors.has(id)) state.colors.delete(id);
+    else state.colors.add(id);
+    state.selected.clear();
+    await reloadNotesOnly();
+  }
+
+  async function clearFilters() {
+    clearTimeout(state.searchTimer);
+    els.search.value = '';
+    state.query = '';
+    state.colors.clear();
+    state.visibility = 'all';
+    state.selectedTag = null;
+    state.selected.clear();
+    renderTags();
+    await reloadNotesOnly();
   }
 
   function renderHeader() {
@@ -698,13 +850,12 @@
     els.viewTitle.textContent = ws ? ws.name : 'Notes';
     const inWs = state.allNotes.filter((n) => n.workspaceId === state.activeWorkspaceId);
     const onScreen = inWs.filter((n) => n.visible).length;
-    els.viewSub.replaceChildren(inWs.length ? `${plural(inWs.length, 'note')} · ${onScreen} on screen` : 'No notes yet');
-    if (state.selectedTag) {
-      els.viewSub.append(
-        ` · showing #${state.selectedTag} `,
-        el('button', { type: 'button', class: 'link-btn', text: 'Show all', onclick: () => setTag(null) })
-      );
-    }
+    if (!inWs.length) els.viewSub.textContent = 'No notes yet';
+    else if (isFiltered()) els.viewSub.textContent = `Showing ${state.notes.length} of ${plural(inWs.length, 'note')}`;
+    else els.viewSub.textContent = `${plural(inWs.length, 'note')}, ${onScreen} on screen`;
+    els.btnClearAll.hidden = !isFiltered();
+    renderPaperFilter(inWs);
+    renderActiveTag();
     const matching = state.allNotes.filter(matchesFilters);
     const open = matching.filter((n) => n.visible).length;
     els.countAll.textContent = String(matching.length);
@@ -729,8 +880,22 @@
   }
 
   function renderEmptyState() {
-    const filtered = Boolean(state.query || state.selectedTag || state.visibility !== 'all');
+    const filtered = isFiltered();
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
+    els.empty.classList.toggle('filtered', filtered);
     els.emptyTitle.textContent = filtered ? 'No matching notes' : 'No notes in this workspace';
+    if (filtered) {
+      const parts = [];
+      if (state.query) parts.push(`“${state.query}”`);
+      if (state.selectedTag) parts.push(`#${state.selectedTag}`);
+      if (state.colors.size) parts.push(state.colors.size === 1 ? `${colorOf([...state.colors][0]).label} paper` : `${state.colors.size} papers`);
+      if (state.visibility !== 'all') parts.push(state.visibility === 'open' ? 'on screen' : 'hidden');
+      els.emptyHint.textContent = `Nothing in ${ws ? ws.name : 'this workspace'} matches ${parts.join(' + ')}. Check the spelling or clear the filters.`;
+    } else {
+      els.emptyHint.textContent = `Notes you create in ${ws ? ws.name : 'this workspace'} are listed here. Press ${modLabel()}N to start one.`;
+    }
+    els.btnEmptyNew.hidden = filtered;
+    els.btnClearFilters.hidden = !filtered;
   }
 
   function toggleSelected(id, on) {
@@ -803,10 +968,14 @@
       openNoteMenu(note, { anchor: more });
     });
 
+    const terms = searchTerms();
     const body = el('div', { class: 'card-body', 'aria-hidden': 'true' });
     const text = bodyText(note);
     if (text.trim()) body.innerHTML = md.renderMarkdown(text.slice(0, 1500));
     else body.appendChild(el('p', { class: 'card-empty', text: 'Empty note' }));
+    const snippetEl = el('p', { class: 'note-snippet', text: snippetFor(note, terms) || 'Empty note' });
+    const tagsEl = el('span', { class: 'card-tags' }, (note.tags || []).map((t) => el('span', { class: 'tag-pill', text: `#${t}` })));
+    for (const node of [titleEl, snippetEl, body, tagsEl]) highlight(node, terms);
 
     const openBtn = el(
       'button',
@@ -846,8 +1015,8 @@
     card.append(
       check,
       el('span', { class: 'paper-dot', 'aria-hidden': 'true' }),
-      el('div', { class: 'card-main' }, [titleEl, el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }), body]),
-      el('span', { class: 'card-tags' }, (note.tags || []).map((t) => el('span', { class: 'tag-pill', text: `#${t}` }))),
+      el('div', { class: 'card-main' }, [titleEl, snippetEl, body]),
+      tagsEl,
       ...clickThrough,
       el('div', { class: 'card-foot' }, [
         el('span', { class: 'when', text: formatRelative(note.updatedAt), title: `Edited ${new Date(note.updatedAt).toLocaleString()}` }),
@@ -880,7 +1049,12 @@
       return;
     }
     state.pendingRender = false;
-    const signature = JSON.stringify([state.layout, state.notes, [...state.selected], state.bootstrap.colors.length]);
+    if (!state.loaded) {
+      state.loaded = true;
+      els.loading.hidden = true;
+      els.notesScroller.removeAttribute('aria-busy');
+    }
+    const signature = JSON.stringify([state.layout, state.notes, [...state.selected], state.bootstrap.colors.length, state.query]);
     const hadFocus = els.noteList.contains(document.activeElement);
     if (signature !== state.renderedSignature) {
       state.renderedSignature = signature;
@@ -1033,6 +1207,12 @@
       { label: 'Duplicate', icon: 'copy', onSelect: () => duplicateNote(note) },
       { label: 'Export as Markdown…', icon: 'file-output', onSelect: () => exportMarkdown(note) }
     );
+    items.push({
+      label: 'Keep on top',
+      checked: note.pinned !== false,
+      checkbox: true,
+      onSelect: () => run('Could not change the note', () => updateNoteOrThrow(note.id, { pinned: note.pinned === false }))
+    });
     if (note.clickThrough) {
       items.push({ label: 'Turn off click-through', icon: 'ghost', onSelect: () => setClickThrough(note, false) });
     }
@@ -1507,6 +1687,41 @@
     ]);
   }
 
+  /** Keys that work inside the Notes Manager, for Settings and the ? sheet. */
+  function managerKeys() {
+    return [
+      ['/', 'Search notes'],
+      [`${modLabel()}N`, 'New note'],
+      ['← → ↑ ↓', 'Move between notes'],
+      [keyHint('Enter'), 'Show the note on screen'],
+      ['Space', 'Select or unselect'],
+      ['F2', 'Rename'],
+      [keyHint('Delete'), 'Move to the trash (Undo in the message that appears)'],
+      [`${modLabel()}1`, 'List view'],
+      [`${modLabel()}2`, 'Board view'],
+      [`${modLabel()},`, 'Settings'],
+      ['?', 'This list of keys'],
+      ['Esc', 'Clear the search or selection; leave Settings and Trash']
+    ];
+  }
+
+  function showKeysSheet() {
+    openModal({
+      title: 'Notes Manager keys',
+      body: el('div', { class: 'keys-grid', id: 'keysSheet' }, managerKeys().flatMap(([k, d]) => [el('kbd', { text: k }), el('span', { text: d })])),
+      footerButtons: [
+        {
+          label: 'Change global shortcuts…',
+          onClick: () => {
+            closeModal();
+            showView('settings', { section: 'setShortcuts' });
+          }
+        },
+        { label: 'Done', primary: true, onClick: closeModal }
+      ]
+    });
+  }
+
   // ---------- settings ----------
 
   function flashSaved() {
@@ -1631,16 +1846,7 @@
     const capability = (ok, text) =>
       el('li', { class: ok ? 'yes' : 'no' }, [el('i', { class: 'dot', 'aria-hidden': 'true' }), el('span', { text })]);
 
-    const keys = [
-      ['/', 'Search notes'],
-      [`${modLabel()}N`, 'New note'],
-      ['← → ↑ ↓', 'Move between notes'],
-      [keyHint('Enter'), 'Show the note on screen'],
-      ['Space', 'Select or unselect'],
-      ['F2', 'Rename'],
-      [keyHint('Delete'), 'Move to the trash (Undo in the message that appears)'],
-      ['Esc', 'Clear the search or selection; leave Settings and Trash']
-    ];
+    const keys = managerKeys();
 
     els.settingsBody.replaceChildren(
       settingsSection('setAppearance', 'Appearance', null, [
@@ -1954,8 +2160,10 @@
     };
     if (state.visibility === 'open') filter.visible = true;
     if (state.visibility === 'hidden') filter.visible = false;
+    if (state.colors.size) filter.colors = [...state.colors];
     const notes = await api.listNotes(filter);
     if (seq !== listSeq) return;
+    els.listError.hidden = true;
     state.notes = notes;
     const ids = new Set(notes.map((n) => n.id));
     for (const id of [...state.selected]) {
@@ -2147,6 +2355,13 @@
     } else if (mod && key === ',') {
       e.preventDefault();
       showView('settings');
+    } else if (mod && !e.shiftKey && !e.altKey && (key === '1' || key === '2')) {
+      e.preventDefault();
+      if (state.view !== 'notes') showView('notes');
+      setLayout(key === '1' ? 'list' : 'board');
+    } else if (!typing && !mod && e.key === '?') {
+      e.preventDefault();
+      showKeysSheet();
     } else if (mod && key === 'a' && !typing && state.view === 'notes') {
       e.preventDefault();
       state.notes.forEach((n) => state.selected.add(n.id));
@@ -2167,6 +2382,9 @@
 
   els.btnNewNote.addEventListener('click', () => createNote('blank'));
   els.btnEmptyNew.addEventListener('click', () => createNote('blank'));
+  els.btnClearFilters.addEventListener('click', () => clearFilters().then(() => els.search.focus()));
+  els.btnClearAll.addEventListener('click', () => clearFilters());
+  els.btnRetry.addEventListener('click', () => reload().catch(showListError));
   els.btnTemplates.addEventListener('click', () => {
     if (anchorJustClosed(els.btnTemplates)) return;
     openMenu(
@@ -2186,13 +2404,20 @@
   els.btnShortcuts.addEventListener('click', () => showView('settings', { section: 'setShortcuts' }));
 
   api.onSaveState((saveState) => renderSaveBanner(saveState.ok ? null : saveState.message));
-  api.onRefresh(() => reload().catch((err) => console.error(err)));
+  api.onRefresh(() => reload().catch(showListError));
   api.onShowShortcuts(() => showView('settings', { section: 'setShortcuts' }));
   api.onShowSettings(() => showView('settings'));
 
   window.addEventListener('beforeunload', () => {
     if (state.recording) api.pauseShortcuts(false);
   });
+
+  /** A failed refresh keeps the last list on screen and says so above it. */
+  function showListError(err) {
+    console.error(err);
+    els.listErrorText.textContent = `The notes list could not be updated: ${errorMessage(err)}`;
+    els.listError.hidden = false;
+  }
 
   function showSafeError(title, detail) {
     const box = el('div', { role: 'alert', class: 'load-error' }, [

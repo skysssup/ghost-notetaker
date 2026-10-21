@@ -112,11 +112,17 @@
               <h1 id="viewTitle">Notes</h1>
               <p id="viewSub" class="view-sub"></p>
             </div>
+          </div>
+
+          <div class="filter-row" role="group" aria-label="Filters">
             <div class="seg filter-seg" role="group" aria-label="Show notes">
               <button type="button" class="seg-btn" data-visibility="all" aria-pressed="true">All <span class="seg-count" id="countAll"></span></button>
               <button type="button" class="seg-btn" data-visibility="open" aria-pressed="false">On screen <span class="seg-count" id="countOpen"></span></button>
               <button type="button" class="seg-btn" data-visibility="hidden" aria-pressed="false">Hidden <span class="seg-count" id="countHidden"></span></button>
             </div>
+            <div id="paperFilter" class="paper-filter" role="group" aria-label="Filter by paper" hidden></div>
+            <div id="activeTag" class="active-tag" hidden></div>
+            <button type="button" id="btnClearAll" class="link-btn clear-all" hidden>Clear filters</button>
           </div>
 
           <div id="bulkBar" class="bulk-bar">
@@ -130,12 +136,24 @@
             </div>
           </div>
 
-          <div class="scroller" id="notesScroller">
-            <div id="noteList" class="note-list list" role="list" aria-label="Notes"></div>
+          <div class="scroller" id="notesScroller" aria-busy="true">
+            <div id="listError" class="list-error" role="alert" hidden>
+              <p id="listErrorText"></p>
+              <button type="button" id="btnRetry" class="hairline-btn">Try again</button>
+            </div>
+            <div id="loading" class="skeleton" aria-hidden="true">
+              <span class="skeleton-card"></span><span class="skeleton-card tall"></span><span class="skeleton-card"></span>
+              <span class="skeleton-card tall"></span><span class="skeleton-card"></span><span class="skeleton-card"></span>
+            </div>
+            <div id="noteList" class="note-list list" role="list" aria-label="Notes" hidden></div>
             <div id="empty" class="empty hidden" role="status">
-              <svg class="ico empty-icon" aria-hidden="true"><use href="#i-sticky-note" /></svg>
+              <div class="empty-slot" aria-hidden="true"></div>
               <p id="emptyTitle" class="empty-title">No notes in this workspace</p>
-              <button type="button" id="btnEmptyNew" class="hairline-btn">New note</button>
+              <p id="emptyHint" class="empty-hint"></p>
+              <div class="empty-actions">
+                <button type="button" id="btnEmptyNew" class="primary-btn">New note</button>
+                <button type="button" id="btnClearFilters" class="hairline-btn" hidden>Clear filters</button>
+              </div>
             </div>
           </div>
         </section>

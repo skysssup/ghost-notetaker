@@ -6,7 +6,7 @@ This page lists Ghost Notetaker's features, how each one is checked, and the res
 
 | Suite | Command | What it runs against |
 | --- | --- | --- |
-| Unit tests | `npm test` | Storage, trash, backups, images, IPC input validation, shortcut parsing, Markdown, and the save queue, run in plain Node |
+| Unit tests | `npm test` | Storage, search matching, trash, backups, images, IPC input validation, shortcut parsing, Markdown, and the save queue, run in plain Node |
 | End-to-end tests | `npm run test:e2e` | The real app started with Playwright: main process, note and manager windows, and the files on disk |
 | Packaged smoke test | `npm run smoke:packaged [executable]` | An installed or unpacked build: formatted welcome note, typing saved to disk, a pasted image stored and shown, a second launch opening the Notes Manager with formatted previews, clean quit, and on macOS and Windows the screen-capture flag on every window |
 
@@ -36,6 +36,8 @@ Playwright normally reports every page as focused. Tests that depend on real foc
 | Small windows | At the 220×180 minimum size every control fits and a drag area remains | E2E | Pass, CI on all four |
 | Notes Manager | Templates, search, tag filter, empty states, rename in place, tags, color, duplicate, move, export; board and list views remembered | E2E | Pass, CI on all four |
 | Keyboard in the Notes Manager | Arrow keys move between notes, `F2` renames, `Delete` trashes, `Enter` opens, `/` searches, `Ctrl/⌘+N` makes a note | E2E | Pass, CI on all four |
+| Finding notes | Search matches every word, in any order, ignoring case and accents, and marks the hits; the paper-color filter narrows the list and Clear filters resets it; the empty state says whether nothing matches or the workspace is empty | E2E (`e2e/manager-find.e2e.js`) and unit tests | Pass on Linux. Not yet run in CI |
+| More manager keys | `Ctrl/⌘+1` and `Ctrl/⌘+2` switch list and board, `?` opens the list of keys and `Esc` closes it; "Keep on top" in a note's menu pins the note window | E2E (`e2e/manager-find.e2e.js`) | Pass on Linux. Not yet run in CI |
 | Trash | Move to trash with Undo (the note reopens if it was on screen), restore, delete forever after confirming, empty the trash, 30-day purge, trash kept through export and import | E2E and unit tests | Pass, CI on all four |
 | Workspaces | Create, switch, rename, and delete; deleting a workspace moves its notes to the trash and closes their windows | E2E | Pass, CI on all four |
 | Bulk show and hide | Selected notes open and close | E2E | Pass, CI on all four |

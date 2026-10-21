@@ -15,7 +15,7 @@ Markdown sticky notes that float above your other windows.
 - **Always on top.** Notes stay above other apps. Move, resize, or shrink one to a bubble.
 - **Markdown.** Checklists, tables, code, links, and pasted images, shown formatted until you click in.
 - **Kept out of screen shares.** On macOS and Windows, notes ask the system to leave them out of screenshots, recordings, and calls. This is best effort.
-- **Notes Manager.** Search, tags, workspaces, templates, list and board views, a 30-day trash, and daily backups.
+- **Notes Manager.** Search, tags, workspaces, templates, list and board views, a 30-day trash, and daily backups. **Quick find** (`Ctrl+K`) jumps to any note, workspace, or command.
 - **Local.** One file on your computer. No account, no sync, no network requests.
 
 ## Notes
@@ -54,6 +54,7 @@ The app lives in the tray (the menu bar on macOS) and opens with a welcome note.
 | Click-through for all notes | `Ctrl+Shift+G` |
 | New note from the clipboard | `Ctrl+Shift+Q` |
 | Reading mode, in a note | `Ctrl+Shift+P` |
+| Quick find, in the Notes Manager | `Ctrl+K` |
 
 On macOS, `Ctrl` is `⌘`. Change any of them in **Settings → Keyboard shortcuts**.
 

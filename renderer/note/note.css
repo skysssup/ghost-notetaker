@@ -10,12 +10,15 @@ body {
   height: 100%;
   overflow: hidden;
   background: transparent;
-  font: 13px/1.45 var(--font-ui);
+  font: var(--fs-2) / 1.45 var(--font-ui);
   -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
-button {
+button,
+input,
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -55,7 +58,7 @@ button {
 
 ::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--ink-line, var(--hairline-strong)) padding-box;
 }
 
@@ -69,59 +72,52 @@ button {
 
 /* ---------- paper ---------- */
 
-/* The window keeps 16px around the paper (32px below) so its shadow is not cut off. */
+/* The paper is the whole window. Flat: one hairline edge, no drop shadow (macOS adds its own). */
 .shell,
 .bubble {
-  --note-tint: #fbe9b0;
+  --note-tint: var(--paper-amber);
   --ink: var(--paper-ink);
   --ink-2: var(--paper-ink-secondary);
-  --ink-3: rgba(31, 29, 26, 0.52);
-  --ink-line: rgba(31, 29, 26, 0.11);
-  --ink-hover: rgba(31, 29, 26, 0.06);
-  --ink-press: rgba(31, 29, 26, 0.1);
-  --ink-code: rgba(31, 29, 26, 0.055);
-  --paper-edge: rgba(0, 0, 0, 0.07);
-  --paper-shine: rgba(255, 255, 255, 0.7);
-  --paper-sheen: rgba(255, 255, 255, 0.34);
-  --capsule: color-mix(in srgb, var(--note-tint) 62%, rgba(255, 255, 255, 0.86));
-  box-shadow: var(--shadow-note);
+  --ink-3: var(--paper-ink-tertiary);
+  --ink-line: var(--paper-ink-line);
+  --ink-hover: var(--paper-ink-wash);
+  --ink-press: var(--paper-ink-line);
+  --ink-code: var(--paper-ink-wash);
+  --paper-edge: var(--paper-ink-line);
+  --capsule: var(--note-tint); /* opaque paper + the --paper-edge ring; no paper+ink mix (§13) */
 }
 
 .shell.ink-light,
 .bubble.ink-light {
   --ink: var(--paper-ink-light);
   --ink-2: var(--paper-ink-light-secondary);
-  --ink-3: rgba(243, 241, 236, 0.52);
-  --ink-line: rgba(243, 241, 236, 0.13);
-  --ink-hover: rgba(243, 241, 236, 0.08);
-  --ink-press: rgba(243, 241, 236, 0.13);
-  --ink-code: rgba(243, 241, 236, 0.08);
-  --paper-edge: rgba(255, 255, 255, 0.09);
-  --paper-shine: rgba(255, 255, 255, 0.1);
-  --paper-sheen: rgba(255, 255, 255, 0.05);
-  --capsule: color-mix(in srgb, var(--note-tint) 78%, rgba(255, 255, 255, 0.3));
+  --ink-3: var(--paper-ink-light-tertiary);
+  --ink-line: var(--paper-ink-light-line);
+  --ink-hover: var(--paper-ink-light-wash);
+  --ink-press: var(--paper-ink-light-line);
+  --ink-code: var(--paper-ink-light-wash);
+  --paper-edge: var(--paper-ink-light-line);
+  --capsule: var(--note-tint);
 }
 
 .shell {
   --opacity: 1;
-  --font-size: 14px;
+  --font-size: var(--fs-3);
   --content-font: var(--font-content);
-  container: paper / inline-size;
+  container: paper / size;
   position: absolute;
-  inset: 16px 16px 32px;
+  inset: 0;
   display: flex;
   flex-direction: column;
   isolation: isolate;
   overflow: hidden;
   border-radius: var(--r-3);
   color: var(--ink);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--paper-sheen) calc(var(--opacity) * 100%), transparent), transparent 96px),
-    color-mix(in srgb, var(--note-tint) calc(var(--opacity) * 100%), transparent);
+  background: color-mix(in srgb, var(--note-tint) calc(var(--opacity) * 100%), transparent);
   transform-origin: 0 0;
 }
 
-/* A hairline edge and a lit top edge, drawn over the paper. */
+/* A hairline edge, drawn over the paper. */
 .shell::after,
 .bubble::after {
   content: '';
@@ -129,9 +125,7 @@ button {
   inset: 0;
   z-index: 10;
   border-radius: inherit;
-  box-shadow:
-    inset 0 0 0 1px var(--paper-edge),
-    inset 0 1px 0 var(--paper-shine);
+  box-shadow: inset 0 0 0 1px var(--paper-edge);
   pointer-events: none;
 }
 
@@ -152,7 +146,7 @@ body.collapsed .shell {
   align-items: center;
   flex: none;
   height: 44px;
-  padding: 10px 8px 0 12px;
+  padding: 10px 8px 0 14px;
   -webkit-app-region: drag;
   app-region: drag;
 }
@@ -186,11 +180,11 @@ body.collapsed .shell {
   height: 28px;
   padding: 0 4px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-2);
   outline-offset: 0;
   background: transparent;
   color: var(--ink);
-  font: 650 14px/28px var(--font-ui);
+  font: 600 var(--fs-3) / 28px var(--font-ui);
   letter-spacing: -0.012em;
   text-overflow: ellipsis;
   transition:
@@ -219,27 +213,16 @@ body.collapsed .shell {
 }
 
 .chrome-buttons {
-  position: absolute;
-  top: 9px;
-  right: 8px;
   display: flex;
+  flex: none;
   align-items: center;
   gap: 1px;
   padding: 2px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--capsule);
-  box-shadow:
-    0 0 0 0.5px var(--paper-edge),
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 4px 12px -4px rgba(0, 0, 0, 0.14),
-    inset 0 1px 0 var(--paper-shine);
-  backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: 0 0 0 0.5px var(--paper-edge);
   opacity: 0;
-  transform: translateY(-2px) scale(0.97);
-  transform-origin: 100% 50%;
-  transition:
-    opacity var(--t-fast) var(--ease),
-    transform var(--t-panel) var(--spring);
+  transition: opacity var(--t-fast) var(--ease);
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -247,7 +230,6 @@ body.collapsed .shell {
 .shell:is(:hover, :focus-within, .panel-open) .chrome-buttons,
 .shell:is(:hover, :focus-within, .panel-open) .grip {
   opacity: 1;
-  transform: none;
 }
 
 .icon-btn,
@@ -259,14 +241,14 @@ body.collapsed .shell {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--ink-2);
   cursor: pointer;
   transition:
     background-color var(--t-fast) var(--ease),
     color var(--t-fast) var(--ease),
-    transform var(--t-panel) var(--spring);
+    transform var(--t-160) var(--ease-out);
 }
 
 .icon-btn .ico,
@@ -284,12 +266,11 @@ body.collapsed .shell {
 .icon-btn:active,
 .md-toolbar button:active {
   background: var(--ink-press);
-  transform: scale(0.92);
 }
 
 .icon-btn.close:hover {
   background: var(--danger-solid);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .icon-btn .glyph {
@@ -299,14 +280,12 @@ body.collapsed .shell {
 
 /* A note in click-through keeps a ghost on screen, so it is clear why clicks pass through. */
 #btnGhost[aria-pressed='true'] {
-  background: var(--brand-gradient);
-  color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 3px oklch(0.45 0.17 35 / 0.45);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .chrome-buttons:has(#btnGhost[aria-pressed='true']) {
   opacity: 1;
-  transform: none;
 }
 
 #btnPreview[aria-pressed='true'],
@@ -333,7 +312,7 @@ body.collapsed .shell {
 
 @container paper (width < 240px) {
   .chrome {
-    padding-left: 8px;
+    padding-left: 14px; /* clear of the 14px grip, so the title's first 96px are the title (N12b) */
   }
 
   .chrome-buttons .icon-btn {
@@ -355,10 +334,9 @@ body.collapsed .shell {
 
 .more-panel,
 .md-toolbar.overflow-open .md-more {
-  background: color-mix(in srgb, var(--raised) 94%, transparent);
-  box-shadow: var(--shadow-menu);
-  backdrop-filter: blur(24px) saturate(1.6);
-  animation: panel-in var(--t-panel) var(--spring);
+  background: var(--raised);
+  box-shadow: var(--shadow-overlay);
+  animation: panel-in var(--t-160) var(--ease-out);
 }
 
 .more-panel {
@@ -392,37 +370,29 @@ body.collapsed .shell {
 
 .panel-label {
   margin-bottom: 8px;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-size: var(--fs-1);
   font-weight: 600;
 }
 
 .palette {
   display: grid;
-  grid-template-columns: repeat(6, 22px);
+  grid-template-columns: repeat(6, 24px);
   justify-content: space-between;
   row-gap: 8px;
 }
 
 .swatch {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   border-radius: 50%;
-  box-shadow: inset 0 0 0 1px var(--swatch-edge), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px var(--swatch-edge);
   cursor: pointer;
   transition:
     transform var(--t-fast) var(--ease),
     box-shadow var(--t-fast) var(--ease);
-}
-
-.swatch:hover {
-  transform: scale(1.1);
-}
-
-.swatch:active {
-  transform: scale(0.94);
 }
 
 .swatch[aria-checked='true'] {
@@ -443,7 +413,7 @@ body.collapsed .shell {
 
 .panel-row output {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-1);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -459,8 +429,8 @@ input[type='range'] {
 
 input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
-  border-radius: 999px;
-  background: var(--fill-strong);
+  border-radius: var(--r-pill);
+  background: var(--text-tertiary); /* non-text 3:1 on the panel */
 }
 
 input[type='range']::-webkit-slider-thumb {
@@ -468,10 +438,8 @@ input[type='range']::-webkit-slider-thumb {
   height: 16px;
   margin-top: -6px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.2),
-    0 1px 3px rgba(0, 0, 0, 0.22);
+  background: var(--on-accent);
+  box-shadow: 0 0 0 1px var(--text-tertiary);
   appearance: none;
 }
 
@@ -480,9 +448,7 @@ input[type='range']:focus-visible {
 }
 
 input[type='range']:focus-visible::-webkit-slider-thumb {
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.2),
-    0 0 0 4px var(--accent-ring);
+  box-shadow: 0 0 0 1px var(--text-tertiary), 0 0 0 3px var(--focus);
 }
 
 .toggle-row {
@@ -503,7 +469,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: none;
   width: 32px;
   height: 19px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--fill-strong);
   box-shadow: inset 0 0 0 1px var(--hairline);
   transition: background-color var(--t-fast) var(--ease);
@@ -517,14 +483,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.24);
-  transition: transform var(--t-panel) var(--spring);
+  background: var(--on-accent);
+  box-shadow: 0 0 0 0.5px var(--hairline-strong);
+  transition: transform var(--t-160) var(--ease-out);
 }
 
 [aria-checked='true'] > .switch {
-  background: var(--brand-gradient);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  background: var(--accent);
 }
 
 [aria-checked='true'] > .switch::after {
@@ -540,9 +505,9 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   margin: 0 -6px;
   padding: 0 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-2);
   background: none;
-  font-weight: 500;
+  font-weight: 400;
   text-align: left;
   cursor: pointer;
 }
@@ -552,44 +517,37 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .text-btn:hover {
-  background: var(--brand-gradient);
-  color: #fff;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .text-btn:hover .ico {
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* ---------- formatting bar: a capsule that floats above the footer while editing ---------- */
 
 .md-toolbar {
-  position: absolute;
-  bottom: 44px;
-  left: 50%;
+  position: relative;
+  order: 2;
   z-index: 6;
   display: flex;
+  align-self: center;
+  flex: none;
+  margin: 0 0 4px;
   align-items: center;
   gap: 1px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--capsule);
-  box-shadow:
-    0 0 0 0.5px var(--paper-edge),
-    0 2px 6px rgba(0, 0, 0, 0.07),
-    0 10px 24px -8px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 var(--paper-shine);
-  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: 0 0 0 0.5px var(--paper-edge);
   opacity: 0;
-  transform: translate(-50%, 4px);
-  transition:
-    opacity var(--t-fast) var(--ease),
-    transform var(--t-panel) var(--spring);
+  transition: opacity var(--t-fast) var(--ease);
 }
 
 .shell:hover .md-toolbar,
 .shell:focus-within .md-toolbar {
   opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .md-toolbar.hidden {
@@ -629,7 +587,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     bottom: calc(100% + 6px);
     display: none;
     padding: 4px;
-    border-radius: 999px;
+    border-radius: var(--r-pill);
     transform-origin: 100% 100%;
   }
 
@@ -649,10 +607,32 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 /* ---------- editor and formatted view ---------- */
 
+/* The main landmark holds the text and, below it, the formatting bar. */
+.note-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .body {
   flex: 1;
   min-height: 0;
   display: grid;
+  /* A clipped last line never sits flush on the tag row (tiny notes, long text). */
+  padding-bottom: 6px;
 }
 
 .body > * {
@@ -682,7 +662,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .editor {
-  padding-bottom: 56px;
+  padding-bottom: 12px;
   resize: none;
   outline: none;
   caret-color: var(--ink);
@@ -696,6 +676,12 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .preview ::selection,
 .title-input::selection {
   background: var(--ink-press);
+}
+
+/* note.js snapPreview() clips a line cut by the bottom edge on .preview-body (inline
+   clip-path), never on .preview, so the view's focus ring stays whole. */
+.preview-body {
+  min-width: 0;
 }
 
 .editor.hidden,
@@ -745,11 +731,11 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   cursor: default;
 }
 
-.preview > :first-child {
+.preview-body > :first-child {
   margin-top: 0;
 }
 
-.preview > :last-child {
+.preview-body > :last-child {
   margin-bottom: 0;
 }
 
@@ -763,19 +749,19 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .preview h3,
 .preview h4 {
   margin: 0.8em 0 0.3em;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.016em;
   text-wrap: balance;
 }
 
 .preview h1 {
-  font-size: 1.34em;
+  font-size: calc(1em + 6px); /* 20 at the default 14 */
   letter-spacing: -0.022em;
 }
 
 .preview h2 {
-  font-size: 1.12em;
+  font-size: calc(1em + 2px); /* 16 at the default 14 */
 }
 
 .preview h3,
@@ -792,15 +778,15 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .preview strong {
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .preview code {
   padding: 0.12em 0.36em;
-  border-radius: 5px;
+  border-radius: var(--r-1);
   background: var(--ink-code);
   font-family: var(--font-mono);
-  font-size: 0.88em;
+  font-size: max(calc(1em - 1px), var(--fs-1));
   letter-spacing: 0;
 }
 
@@ -887,10 +873,6 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   border-color: var(--ink-2);
 }
 
-.preview .task-check:active {
-  transform: scale(0.9);
-}
-
 .preview .task-check:checked {
   border-color: var(--ink);
   background: var(--ink);
@@ -941,7 +923,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   width: 100%;
   margin: 0.6em 0;
   border-collapse: collapse;
-  font-size: 0.93em;
+  font-size: max(calc(1em - 1px), var(--fs-1));
   font-variant-numeric: tabular-nums;
 }
 
@@ -954,7 +936,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .preview th {
   color: var(--ink-2);
-  font-weight: 550;
+  font-weight: 600;
 }
 
 .preview tr:last-child td {
@@ -975,20 +957,28 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .status {
   display: flex;
+  order: 3;
   align-items: center;
   gap: 4px;
   flex: none;
   min-height: 40px;
   padding: 0 10px 10px 14px;
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--fs-1);
 }
 
 .tags {
   display: flex;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+/* Tags that do not fit scroll sideways (focus scrolls a tag into view); no scrollbar is drawn. */
+.tags::-webkit-scrollbar {
+  display: none;
 }
 
 .tag {
@@ -998,11 +988,11 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   height: 22px;
   padding: 0 8px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--ink-hover);
   color: var(--ink-2);
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: var(--fs-1);
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -1042,7 +1032,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: none;
   height: 22px;
   padding: 0 7px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--ink-2);
   cursor: text;
   opacity: 0;
@@ -1075,11 +1065,17 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-1);
 }
 
 .tag-input:focus {
   width: 7em;
+}
+
+/* The field itself has no outline; the pill around it shows the keyboard focus ring. */
+.tag-add:has(.tag-input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .tag-input::placeholder {
@@ -1093,12 +1089,11 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   max-width: 72%;
   margin-left: auto;
   padding: 5px 10px;
-  border-radius: 999px;
-  background: var(--glass);
-  box-shadow: var(--shadow-menu);
-  backdrop-filter: blur(16px) saturate(1.4);
+  border-radius: var(--r-pill);
+  background: var(--raised);
+  box-shadow: var(--shadow-overlay);
   color: var(--text);
-  font-size: 11.5px;
+  font-size: var(--fs-1);
   line-height: 1.35;
 }
 
@@ -1123,8 +1118,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .bubble {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: 0;
+  left: 0;
   width: 56px;
   height: 56px;
   display: grid;
@@ -1132,19 +1127,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   padding: 0;
   border: none;
   border-radius: 50%;
-  background:
-    radial-gradient(120% 90% at 30% 15%, rgba(255, 255, 255, 0.55), transparent 60%),
-    var(--note-tint);
+  background: var(--note-tint);
   color: var(--ink);
-  font: 650 21px/1 var(--font-content);
+  font: 600 var(--fs-5) / 1 var(--font-content);
   letter-spacing: -0.02em;
   cursor: grab;
   touch-action: none;
-  transition: transform var(--t-panel) var(--spring);
-}
-
-.bubble:hover {
-  transform: scale(1.06);
+  transition: transform var(--t-160) var(--ease-out);
 }
 
 .bubble[hidden] {
@@ -1153,26 +1142,25 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .bubble:active {
   cursor: grabbing;
-  transform: scale(0.98);
 }
 
 /* ---------- collapsing to a bubble and back ---------- */
 
 .shell.collapsing {
-  animation: paper-out var(--t-morph) var(--ease) forwards;
+  animation: paper-out var(--t-160) var(--ease) forwards;
 }
 
 .shell.expanding {
-  animation: paper-in var(--t-morph) var(--ease);
+  animation: paper-in var(--t-160) var(--ease);
 }
 
 .bubble.appearing {
-  animation: fade-in var(--t-morph) var(--ease);
+  animation: fade-in var(--t-160) var(--ease);
 }
 
 .bubble.leaving {
   pointer-events: none;
-  animation: fade-out var(--t-morph) var(--ease) forwards;
+  animation: fade-out var(--t-160) var(--ease) forwards;
 }
 
 @keyframes paper-out {
@@ -1194,16 +1182,15 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 @media (prefers-contrast: more) {
   .shell,
   .bubble {
-    --ink-3: rgba(31, 29, 26, 0.72);
-    --ink-line: rgba(31, 29, 26, 0.3);
-    --paper-edge: rgba(0, 0, 0, 0.32);
+    /* --ink-3 already follows --paper-ink-tertiary, which tokens.css raises here. */
+    --ink-line: var(--paper-ink-line-strong);
+    --paper-edge: var(--paper-ink-edge-strong);
   }
 
   .shell.ink-light,
   .bubble.ink-light {
-    --ink-3: rgba(243, 241, 236, 0.74);
-    --ink-line: rgba(243, 241, 236, 0.34);
-    --paper-edge: rgba(255, 255, 255, 0.34);
+    --ink-line: var(--paper-ink-light-line-strong);
+    --paper-edge: var(--paper-ink-light-edge-strong);
   }
 
   .chrome-buttons,
@@ -1241,14 +1228,14 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   padding: 16px;
   border-radius: var(--r-3);
   background: var(--raised);
-  box-shadow: var(--shadow-menu);
+  box-shadow: var(--edge-strong);
   color: var(--text);
   line-height: 1.45;
 }
 
 .load-error h1 {
   margin: 0 0 8px;
-  font-size: 14px;
+  font-size: var(--fs-3);
   font-weight: 600;
 }
 
@@ -1260,5 +1247,69 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .load-error .hint {
   margin-top: 10px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-1);
+}
+
+/* ---------- tiny notes (SPEC §5 L-TINY, keep #2 / N12 / N13) ---------- */
+
+/* Below 300px of paper, note.js moves Reading mode, Click-through and Collapse into the
+   "Appearance and more" panel (.shell.compact); the capsule keeps More and Hide only. */
+.compact-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.compact-actions[hidden] {
+  display: none;
+}
+
+.compact-actions .icon-btn {
+  color: var(--text-secondary);
+}
+
+.compact-actions .icon-btn:hover {
+  background: var(--fill-strong);
+  color: var(--text);
+}
+
+.shell.compact .chrome-buttons .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.shell.compact .icon-btn.close {
+  margin-left: 0;
+}
+
+/* Short paper (the 220x180 minimum): a 32px top bar, a 28px formatting bar and a 28px
+   footer leave 88px for the text: four lines at 14px, two at 28px. Nothing overlaps the text. */
+@container paper (height < 220px) {
+  .chrome {
+    height: 32px;
+    padding-top: 2px;
+  }
+
+  .grip {
+    top: 7px;
+  }
+
+  .editor,
+  .preview {
+    padding: 2px 12px 2px;
+  }
+
+  .status {
+    min-height: 28px;
+    padding-bottom: 4px;
+  }
+
+  .md-toolbar {
+    margin: 0 0 2px;
+    padding: 2px;
+  }
+
+  .md-toolbar button {
+    width: 24px;
+    height: 24px;
+  }
 }

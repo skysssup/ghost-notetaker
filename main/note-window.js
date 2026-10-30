@@ -14,30 +14,7 @@ const { clampBoundsToDisplays, getDisplayById } = require('./display');
 const FLUSH_SCRIPT =
   'typeof window.__ghostFlushPending === "function" ? window.__ghostFlushPending() : ({ ok: true })';
 
-/**
- * Note windows are transparent around the paper so its shadow is not cut off:
- * 16px on the top and sides and 32px below, where the shadow is longest. Saved
- * bounds keep the meaning they had when windows left 8px (the paper plus 8px on
- * every side), so a note's paper stays exactly where it was.
- */
-const OUTSET = { side: 8, bottom: 24 };
-const toWindow = (b) => ({
-  x: b.x - OUTSET.side,
-  y: b.y - OUTSET.side,
-  width: b.width + 2 * OUTSET.side,
-  height: b.height + OUTSET.side + OUTSET.bottom
-});
-const fromWindow = (b) => ({
-  x: b.x + OUTSET.side,
-  y: b.y + OUTSET.side,
-  width: b.width - 2 * OUTSET.side,
-  height: b.height - OUTSET.side - OUTSET.bottom
-});
-
-/** Window of a note collapsed into a bubble: a 56px circle with the same margins. */
-const BUBBLE_SIZE = { width: 88, height: 104 };
-const bubbleWindow = (b) => ({ x: b.x - OUTSET.side, y: b.y - OUTSET.side, ...BUBBLE_SIZE });
-const NOTE_MIN = { width: 220, height: 180 };
+const { INSET, toWindow, fromWindow, BUBBLE_SIZE, bubbleWindow, NOTE_MIN } = require('./note-geometry');
 
 /**
  * Keep a note on a visible work area. macOS and Linux window managers push a window
@@ -54,8 +31,8 @@ function clampNote(bounds, displayId) {
   const inside = (pos, size, start, length) => Math.max(start, Math.min(pos, start + length - size));
   return {
     ...clamped,
-    x: inside(win.x, win.width, area.x, area.width) + OUTSET.side,
-    y: inside(win.y, win.height, area.y, area.height) + OUTSET.side
+    x: inside(win.x, win.width, area.x, area.width) - INSET,
+    y: inside(win.y, win.height, area.y, area.height) - INSET
   };
 }
 
@@ -129,6 +106,9 @@ class NoteWindowController {
 
     const win = new BrowserWindow(opts);
     this.windows.set(noteId, win);
+    // The page never renames the window: a note's title must not reach the
+    // taskbar, window switchers, or screen-share pickers.
+    win.on('page-title-updated', (e) => e.preventDefault());
 
     applyContentProtection(win, this._contentProtectionEnabled());
     applyAlwaysOnTop(win, note.pinned);

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- avoid-ai-design-ignore-file: K7 (focus rings are the :focus-visible rules in manager.css; a parse of this file alone cannot see them) -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -38,9 +39,7 @@
         <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
         <symbol id="i-ghost" viewBox="0 0 24 24"><path d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q16.73 22 14.37 19.6Q12 22 9.63 19.6Q7.27 22 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z"/><path d="M10 12h.01"/><path d="M14 12h.01"/></symbol>
         <symbol id="i-sticky-note" viewBox="0 0 24 24"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/></symbol>
-        <linearGradient id="g-logo-tile" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="#f88a3d"/><stop offset="0.55" stop-color="#ee5e23"/><stop offset="1" stop-color="#cc3719"/></linearGradient>
-        <linearGradient id="g-logo-sheet" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbf3"/><stop offset="1" stop-color="#f8e4d4"/></linearGradient>
-        <symbol id="i-logo" viewBox="0 0 24 24"><rect width="24" height="24" rx="6.5" fill="url(#g-logo-tile)"/><rect x=".5" y=".5" width="23" height="23" rx="6" fill="none" stroke="#fff" stroke-opacity=".25"/><g transform="translate(4.56 4.23) scale(.62)"><path fill="url(#g-logo-sheet)" d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q17.33 22.1 15.55 19.6Q13.78 22.1 12 19.6Q10.22 22.1 8.45 19.6Q6.67 22.1 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z"/><ellipse cx="10" cy="12.1" rx="1.1" ry="1.45" fill="#4e1b0f"/><ellipse cx="14" cy="12.1" rx="1.1" ry="1.45" fill="#4e1b0f"/></g></symbol>
+        <symbol id="i-logo" viewBox="0 0 24 24"><path d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q17.33 22.1 15.55 19.6Q13.78 22.1 12 19.6Q10.22 22.1 8.45 19.6Q6.67 22.1 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/><ellipse cx="10.05" cy="12.2" rx="1" ry="1.3" fill="currentColor"/><ellipse cx="13.95" cy="12.2" rx="1" ry="1.3" fill="currentColor"/></symbol>
         <symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
         <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
         <symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
@@ -57,7 +56,7 @@
     </svg>
 
     <div class="app">
-      <aside class="sidebar" aria-label="Notes Manager navigation">
+      <aside id="sidebar" class="sidebar" aria-label="Notes Manager navigation">
         <div class="sidebar-top drag">
           <div class="brand">
             <svg class="brand-mark" aria-hidden="true"><use href="#i-logo" /></svg>
@@ -109,6 +108,7 @@
 
         <section id="notesView" class="view" aria-labelledby="viewTitle">
           <header class="toolbar drag">
+            <button type="button" id="btnNav" class="hairline-btn icon-only nav-toggle" aria-label="Navigation" title="Navigation" aria-expanded="false" aria-controls="sidebar"><svg class="ico"><use href="#i-list" /></svg></button>
             <div class="search-wrap">
               <svg class="ico"><use href="#i-search" /></svg>
               <input id="search" type="search" placeholder="Search notes" aria-label="Search notes" autocomplete="off" />
@@ -118,7 +118,7 @@
               <button type="button" id="btnList" class="seg-btn icon-only" aria-pressed="true" title="List" aria-label="List"><svg class="ico"><use href="#i-list" /></svg></button>
               <button type="button" id="btnBoard" class="seg-btn icon-only" aria-pressed="false" title="Board" aria-label="Board"><svg class="ico"><use href="#i-layout-grid" /></svg></button>
             </div>
-            <button type="button" id="sortBy" class="menu-btn" aria-haspopup="menu" aria-expanded="false" title="Sort notes">
+            <button type="button" id="sortBy" class="menu-btn" aria-haspopup="menu" aria-expanded="false" title="Sort notes" aria-label="Sort by: Last edited">
               <span id="sortLabel">Last edited</span><svg class="ico"><use href="#i-chevron-down" /></svg>
             </button>
             <div class="split">
@@ -167,39 +167,7 @@
             </div>
             <div id="noteList" class="note-list list" role="list" aria-label="Notes" hidden></div>
             <div id="empty" class="empty hidden" role="status">
-              <svg class="empty-art" viewBox="0 0 200 150" aria-hidden="true">
-                <ellipse class="ea-floor" cx="100" cy="134" rx="70" ry="7" />
-                <g class="ea-papers">
-                  <g transform="rotate(-9 70 78)">
-                    <rect class="ea-paper ea-amber" x="38" y="40" width="70" height="76" rx="9" />
-                    <rect class="ea-line" x="50" y="56" width="34" height="5" rx="2.5" />
-                    <rect class="ea-line soft" x="50" y="70" width="46" height="4" rx="2" />
-                    <rect class="ea-line soft" x="50" y="81" width="40" height="4" rx="2" />
-                    <rect class="ea-line soft" x="50" y="92" width="28" height="4" rx="2" />
-                  </g>
-                  <g transform="rotate(6 116 72)">
-                    <rect class="ea-paper ea-ivory" x="80" y="32" width="72" height="80" rx="9" />
-                    <rect class="ea-line" x="92" y="48" width="30" height="5" rx="2.5" />
-                    <rect class="ea-box" x="92" y="62" width="8" height="8" rx="2" />
-                    <rect class="ea-line soft" x="105" y="64" width="34" height="4" rx="2" />
-                    <rect class="ea-box on" x="92" y="76" width="8" height="8" rx="2" />
-                    <rect class="ea-line soft" x="105" y="78" width="26" height="4" rx="2" />
-                    <rect class="ea-box" x="92" y="90" width="8" height="8" rx="2" />
-                    <rect class="ea-line soft" x="105" y="92" width="30" height="4" rx="2" />
-                  </g>
-                </g>
-                <g class="ea-ghost">
-                  <g transform="translate(128 58) scale(2.6)">
-                    <path class="ea-sheet" d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q17.33 22.1 15.55 19.6Q13.78 22.1 12 19.6Q10.22 22.1 8.45 19.6Q6.67 22.1 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z" />
-                    <ellipse class="ea-eye" cx="10" cy="12.1" rx="1" ry="1.3" />
-                    <ellipse class="ea-eye" cx="14" cy="12.1" rx="1" ry="1.3" />
-                  </g>
-                  <g class="ea-lens">
-                    <circle cx="140" cy="112" r="10" />
-                    <path d="m147.5 119.5 8 8" />
-                  </g>
-                </g>
-              </svg>
+              <svg class="empty-mark" aria-hidden="true"><use href="#i-logo" /></svg>
               <p id="emptyTitle" class="empty-title">No notes in this workspace</p>
               <p id="emptyHint" class="empty-hint"></p>
               <div class="empty-actions">
@@ -213,7 +181,7 @@
         <section id="trashView" class="view" aria-labelledby="trashTitle" hidden>
           <div class="page-head drag">
             <div class="view-titles">
-              <h1 id="trashTitle">Trash</h1>
+              <h1 id="trashTitle" tabindex="-1">Trash</h1>
               <p class="view-sub">Notes are deleted for good after 30 days.</p>
             </div>
             <button type="button" id="btnEmptyTrash" class="hairline-btn danger">Empty trash</button>
@@ -221,16 +189,7 @@
           <div class="scroller">
             <div id="trashList" class="note-list list trash" role="list" aria-label="Notes in the trash"></div>
             <div id="trashEmpty" class="empty hidden" role="status">
-              <svg class="empty-art small" viewBox="0 0 200 150" aria-hidden="true">
-                <ellipse class="ea-floor" cx="100" cy="134" rx="46" ry="6" />
-                <g class="ea-ghost">
-                  <g transform="translate(66 36) scale(2.9)">
-                    <path class="ea-sheet" d="M5.4 10.8A6.6 6.6 0 0 1 18.6 10.8C18.6 14.8 19.1 16.6 19.1 19.6Q17.33 22.1 15.55 19.6Q13.78 22.1 12 19.6Q10.22 22.1 8.45 19.6Q6.67 22.1 4.9 19.6C4.9 16.6 5.4 14.8 5.4 10.8Z" />
-                    <ellipse class="ea-eye" cx="10" cy="12.1" rx="1" ry="1.3" />
-                    <ellipse class="ea-eye" cx="14" cy="12.1" rx="1" ry="1.3" />
-                  </g>
-                </g>
-              </svg>
+              <svg class="empty-mark" aria-hidden="true"><use href="#i-logo" /></svg>
               <p class="empty-title">Trash is empty</p>
               <p class="empty-hint">Deleted notes stay here for 30 days.</p>
             </div>
@@ -262,6 +221,7 @@
             </div>
           </div>
         </section>
+        <div id="menu" class="menu hidden" role="menu" aria-label="Actions"></div>
       </main>
     </div>
 
@@ -284,6 +244,7 @@
           <kbd class="cmdk-esc">Esc</kbd>
         </div>
         <div id="cmdkList" class="cmdk-list" role="listbox" aria-label="Results"></div>
+        <div id="cmdkStatus" class="sr-only" role="status" aria-live="polite"></div>
         <div class="cmdk-foot" aria-hidden="true">
           <span><kbd>↑</kbd><kbd>↓</kbd> to move</span>
           <span><kbd>↵</kbd> to choose</span>
@@ -292,7 +253,6 @@
       </div>
     </div>
 
-    <div id="menu" class="menu hidden" role="menu" aria-label="Actions"></div>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite">
       <span id="toastText"></span>

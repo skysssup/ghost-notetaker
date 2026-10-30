@@ -4,12 +4,34 @@
 
 ### Changed
 
-- **New look: Ember.** A new ember-colored app icon and brand color, Instrument Sans and Instrument Serif type, an inset main panel over a warm sidebar, richer paper colors, tactile board cards that lift on hover, and a ghost badge on notes that are on screen. Dark mode draws board cards as tinted glass. Settings has colored icons, grouped rows, theme previews, and new switches. Note windows get a paper sheen, an ember ghost button in click-through, and brand-colored switches.
+- **New look.** A calm, flat interface: opaque surfaces with one hairline, shadows only on menus, dialogs and other overlays, one plum accent (Damson) on plum-grey neutrals, and the notes' paper colours as the only strong colour. Instrument Sans throughout, with Instrument Serif for view titles. A monochrome line-ghost icon, and a tray icon that follows a light or dark taskbar, switching as soon as the taskbar theme changes. No gradients, blur, glows, springs or looping animation; motion is a short fade or 2px slide and stops entirely with Reduce motion.
+- **Dark mode board.** Cards are neutral and show their paper colour as an edge, so the board does not glare at night.
+- **Workspaces** have a neutral initial badge with a small colour-blind-safe dot, assigned by workspace order (the seventh workspace reuses the first colour).
+- **Note windows fill their window.** The transparent margin around each note is gone, so clicks just outside the paper reach the desktop. Saved positions are unchanged. On macOS the system window shadow is the note's shadow.
+- **Small notes.** At the smallest size (220×180) the formatting bar, tags and status all fit below at least three lines of text while you type.
 
 ### Added
 
 - **Quick find** (⌘K / Ctrl+K in the Notes Manager) finds notes in every workspace, switches workspaces, and runs commands from the keyboard.
-- Illustrated empty states, workspace badges, and tag counts in the sidebar.
+- Tag counts in the sidebar.
+
+### Fixed
+
+- **Trash keyboard focus.** After Restore, Delete forever (including its confirmation) or Empty trash, focus moves to the next note in the Trash, else the previous one, else the Trash heading, never to the page.
+- **List previews** separate a note's lines with " · ", leave out leading list, task and quote markers, drop paired `**` and `__` emphasis markers, keep hyphenated and underscored words such as "blue-otter-42" and "snake_case" whole, and never end on a dangling separator.
+- **Search field.** At rest it shows a 1px outline at 3:1 contrast and the accent ring appears while it has focus, instead of the ring showing all the time; the Notes Manager no longer focuses it when it opens.
+- **Dialog errors.** When a dialog's action fails, focus moves to the error message instead of the page.
+- **Tags.** The active tag filter shows a long tag in full; only tags on cards are shortened.
+- **Small notes** never show half a line of text above the tags, and the formatted view's focus ring stays whole.
+- **Trash** rows on a dark paper show a light initial.
+- **Dependencies.** Electron 42.11.18 and patched fast-uri and undici; `npm audit` reports no vulnerabilities.
+- **Untitled notes are named by their first line.** A note you have not named shows its first line with words in it (Markdown markers removed, at most 60 characters) as its title on cards, in Quick find, the tray, and the bubble. A title you type always wins, even "Untitled"; clearing it hands the title back to the text. Existing notes with an empty title pick up their first line on the next start; notes titled "Untitled" keep that title. Note windows keep the generic window title "Ghost Note", so no note title shows in the taskbar, window switchers, or screen-share pickers.
+- **Keyboard focus follows a note into and out of its bubble.** Collapsing moves focus to the bubble instead of losing it; expanding returns to the text field that had it, or to the note text.
+- **Tags are added on purpose.** Only Enter or a comma adds a tag; tabbing or clicking away no longer turns typed text into a tag. Typed text is never thrown away: it stays in the field and is saved with the note, so it is still there after closing and reopening the note, until you add it or clear it with Escape. The tag field shows a focus ring.
+- **Smallest text size is 12px.** The note text-size slider and **Settings → New notes → Text size** start at 12px. A note saved at 10 or 11px shows at 12px; its stored size is left as it was.
+- **Accessibility.** Secondary 12px text meets 4.5:1 in light mode; slider tracks and off switches meet 3:1; the board's "on screen" mark is readable on every paper and in dark mode; list tags no longer shrink to "#…"; colour swatches are 24px; with more contrast turned on, a note's outer edge reaches 3:1 on every paper. Removing a tag from the keyboard keeps focus in the tag row. Note cards are list items with h2 titles, card previews no longer contain hidden focusable checkboxes, the formatting bar is inside the note's main region, and "Delete forever" buttons are named by their visible text.
+- **Screen readers.** The formatting bar is a toolbar with one Tab stop (arrow keys, Home, and End move inside it); Quick find announces "Nothing matches"; the sort button is named "Sort by: …"; each card's show/hide button names its note ("Hide Groceries").
+- **Existing "Untitled" notes are named by their first line, once.** The first start after updating clears every title that is exactly "Untitled" (the old default), including one you had typed as "Untitled" yourself, since old notes files cannot tell the two apart, and saves the notes file as version 3, so this happens only once; a note you title "Untitled" afterwards keeps that title. Importing or restoring an older backup does the same for the imported notes. Older versions of the app cannot open a version 3 notes file.
 
 ## [1.7.0] - 2026-10-04
 

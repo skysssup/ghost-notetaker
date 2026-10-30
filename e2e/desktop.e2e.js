@@ -15,12 +15,15 @@ const {
   openManager,
   openWindowIds,
   hasXdotool,
+  hasWindowManager,
   xdotool,
   focusEditorEnd,
   startEditing
 } = require('./helpers');
 
 const skip = !hasXdotool() && 'needs Linux/X11 with xdotool';
+// A title-bar drag is carried out by the window manager; with none running the window cannot move.
+const noWm = skip || (!hasWindowManager() && 'needs a window manager on $DISPLAY (none found: _NET_SUPPORTING_WM_CHECK is unset); start one, e.g. openbox');
 
 let running = [];
 afterEach(async () => {
@@ -68,12 +71,12 @@ describe('desktop integration (X11)', { skip }, () => {
     await waitFor(async () => (await openWindowIds(ctx.app)).length === 1, 'shown again');
   });
 
-  it('dragging the top bar moves the note and the position is saved', async () => {
+  it('dragging the top bar moves the note and the position is saved', { skip: noWm }, async () => {
     const ctx = await start();
     await placeNote(ctx.app, { x: 300, y: 200, width: 360, height: 300 });
     const b = await noteBounds(ctx.app);
-    const sx = b.x + 8 + 3 + 7;
-    const sy = b.y + 8 + 18;
+    const sx = b.x + 3 + 7;
+    const sy = b.y + 18;
     xdotool('mousemove', sx, sy, 'sleep', '0.3', 'mousedown', '1', 'sleep', '0.2',
       'mousemove', sx + 40, sy + 30, 'sleep', '0.2', 'mousemove', sx + 160, sy + 120, 'sleep', '0.3', 'mouseup', '1');
     const moved = await waitFor(async () => {
@@ -81,10 +84,10 @@ describe('desktop integration (X11)', { skip }, () => {
       return now.x >= b.x + 80 && now.y >= b.y + 60 ? now : null;
     }, 'window moved by the drag');
     // The window manager settles the final position; what is on disk must match it
-    // (saved bounds start 8px inside the window, where the paper's 8px margin begins).
+    // (saved bounds are the paper, which is the window, plus 8px on every side).
     await waitForStore(
       ctx.dataFile,
-      (s) => s.notes[0]?.bounds.x === moved.x + 8 && s.notes[0]?.bounds.y === moved.y + 8,
+      (s) => s.notes[0]?.bounds.x === moved.x - 8 && s.notes[0]?.bounds.y === moved.y - 8,
       'moved bounds on disk'
     );
   });
@@ -108,14 +111,14 @@ describe('desktop integration (X11)', { skip }, () => {
     }, 'bubble moved by the drag');
     assert.ok(moved.width < 100, 'a drag must not expand the bubble');
     // While collapsed, the file keeps the full size at the new position
-    // (saved bounds are 8px inside the window on each side).
+    // (saved bounds reach 8px past the bubble's window on each side).
     await waitForStore(
       ctx.dataFile,
-      (s) => s.notes[0]?.bounds.x === moved.x + 8 && s.notes[0]?.bounds.width === 344 && s.notes[0]?.collapsed,
+      (s) => s.notes[0]?.bounds.x === moved.x - 8 && s.notes[0]?.bounds.width === 376 && s.notes[0]?.collapsed,
       'bubble position on disk'
     );
 
-    xdotool('mousemove', moved.x + 32, moved.y + 32, 'sleep', '0.3', 'click', '1');
+    xdotool('mousemove', moved.x + 28, moved.y + 28, 'sleep', '0.3', 'click', '1');
     const expanded = await waitFor(async () => {
       const now = await noteBounds(ctx.app);
       return now.width === 360 ? now : null;

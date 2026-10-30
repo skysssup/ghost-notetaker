@@ -61,6 +61,7 @@
     searchHint: $('searchHint'),
     sortBy: $('sortBy'),
     sortLabel: $('sortLabel'),
+    cmdkStatus: $('cmdkStatus'),
     btnBoard: $('btnBoard'),
     btnList: $('btnList'),
     btnNewNote: $('btnNewNote'),
@@ -137,7 +138,7 @@
 
   function colorOf(id) {
     const colors = (state.bootstrap && state.bootstrap.colors) || [];
-    return colors.find((c) => c.id === id) || { id, hex: '#e7e9ea', ink: 'dark', label: id };
+    return colors.find((c) => c.id === id) || { id, hex: getComputedStyle(document.documentElement).getPropertyValue('--paper-mist').trim(), ink: 'dark', label: id };
   }
 
   function formatRelative(iso) {
@@ -161,9 +162,17 @@
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  /** Note text without a first heading that only repeats the title. */
+  /** Note text without a first line that only repeats the title. */
   function bodyText(note) {
     const text = String(note.content || '');
+    // An untitled note's title is its first line with words in it; skip up to that line.
+    if (note.autoTitle) {
+      const lines = text.split('\n');
+      const first = lines.findIndex((line) => !/^\s*(```|~~~)/.test(line) && /[\p{L}\p{N}]/u.test(line));
+      const rest = first >= 0 ? lines.slice(first + 1).join('\n').replace(/^\s*\n/, '') : '';
+      // A one-line note keeps its line, so the card does not call it empty.
+      if (rest.trim()) return rest;
+    }
     const firstLine = text.split('\n', 1)[0];
     const heading = /^#+\s+(.*)$/.exec(firstLine);
     if (heading && heading[1].trim().toLowerCase() === String(note.title || '').trim().toLowerCase()) {
@@ -173,16 +182,47 @@
   }
 
   /** Plain-text preview of a note. */
-  function snippet(note, max = 300) {
-    return bodyText(note)
-      .replace(/```[\s\S]*?```/g, ' ')
+  // Lines are joined with " · " so "Saturday", "Farmers market" and
+  // "Bike to the lake" read as three items, not one run-on sentence.
+  const SNIPPET_SEP = ' · ';
+
+  // Only leading block markers (heading, quote, list, task) and inline markup are
+  // removed; hyphens, underscores and brackets inside words stay ("blue-otter-42").
+  function snippetLine(line) {
+    return line
       .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-      .replace(/^#+\s+/gm, '')
-      .replace(/^\s*[-*]\s+\[[ xX]\]\s*/gm, '')
-      .replace(/[*_`[\]()>|~-]/g, ' ')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^\s*#+\s+/, '')
+      .replace(/^\s*(?:>\s*)+/, '')
+      .replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s*)?/, '')
+      // Paired emphasis (**bold**, __bold__, *it*, _it_) loses its markers; a lone
+      // "*" (2*3) and underscores inside words (snake_case) stay.
+      .replace(/(\*\*|\*)(?=\S)(.+?)(?<=\S)\1/g, '$2')
+      .replace(/(^|[^\p{L}\p{N}_])(__|_)(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}_])/gu, '$1$3')
+      .replace(/`+|~~/g, '')
+      .replace(/^\s*\||\|\s*$/g, '')
+      .replace(/\s*\|\s*/g, ' ')
       .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, max);
+      .trim();
+  }
+
+  function snippet(note, max = 300) {
+    const lines = bodyText(note)
+      .replace(/```[\s\S]*?```/g, '\n')
+      .split('\n')
+      .map(snippetLine)
+      .filter((line) => /[\p{L}\p{N}]/u.test(line) && !/^[\s|:-]+$/.test(line));
+    // Cut at `max` before joining, so a preview never ends in a dangling " ·".
+    let out = '';
+    for (const line of lines) {
+      const next = out ? out + SNIPPET_SEP + line : line;
+      if (next.length > max) {
+        out = out || line.slice(0, max).trimEnd();
+        break;
+      }
+      out = next;
+    }
+    return out;
   }
 
   // ---------- search ----------
@@ -257,9 +297,14 @@
   function snippetFor(note, terms) {
     const full = snippet(note, Infinity);
     const first = hitRanges(full, terms)[0];
-    if (!first || first[0] < 60) return full.slice(0, 300);
+    if (!first || first[0] < 60) return clipSnippet(full, 0);
     const start = full.lastIndexOf(' ', first[0] - 24) + 1;
-    return `…${full.slice(start, start + 300)}`;
+    return `…${clipSnippet(full, start)}`;
+  }
+
+  /** 300 characters from `start`, never ending in a dangling " ·" or space. */
+  function clipSnippet(text, start) {
+    return text.slice(start, start + 300).replace(/[\s·]+$/u, '');
   }
 
   /** ipcRenderer.invoke prefixes main-process errors; show only the message. */
@@ -336,13 +381,14 @@
     ).filter((node) => node.offsetParent !== null);
   }
 
-  function closeModal() {
+  /** `restoreFocus: false` when the caller moves focus itself (the opener is about to go away). */
+  function closeModal({ restoreFocus = true } = {}) {
     els.modal.classList.add('hidden');
     els.modalBody.textContent = '';
     els.modalFooter.textContent = '';
     els.modalCard.classList.remove('wide');
     document.removeEventListener('keydown', onModalKeydown, true);
-    if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
+    if (restoreFocus && lastFocus && document.contains(lastFocus)) lastFocus.focus();
     lastFocus = null;
   }
 
@@ -388,12 +434,19 @@
       btn.addEventListener('click', async () => {
         const buttons = Array.from(els.modalFooter.querySelectorAll('button'));
         buttons.forEach((x) => (x.disabled = true));
+        let failed = false;
         try {
           await b.onClick(btn);
         } catch (err) {
+          failed = true;
           showModalError(errorMessage(err));
         } finally {
           buttons.forEach((x) => (x.disabled = false));
+        }
+        // Disabling the footer dropped focus to the page; put it on the error, which
+        // screen readers then read, and from which Tab reaches the buttons again.
+        if (failed && !els.modal.classList.contains('hidden')) {
+          els.modalBody.querySelector('.modal-error')?.focus();
         }
       });
       els.modalFooter.appendChild(btn);
@@ -412,7 +465,7 @@
   function showModalError(message) {
     let box = els.modalBody.querySelector('.modal-error');
     if (!box) {
-      box = el('p', { class: 'modal-error', role: 'alert' });
+      box = el('p', { class: 'modal-error', role: 'alert', tabindex: '-1' });
       els.modalBody.appendChild(box);
     }
     box.textContent = message;
@@ -562,6 +615,28 @@
     if (first) first.focus();
   }
 
+  // Narrow windows (< 768px): the sidebar is a drawer behind the Navigation button (SPEC §5 L-PHONE).
+  const appEl = document.querySelector('.app');
+  const navToggle = $('btnNav');
+  const narrow = matchMedia('(max-width: 767px)');
+  const setNav = (open) => {
+    appEl.classList.toggle('nav-open', open);
+    navToggle.setAttribute('aria-expanded', String(open));
+    if (open) appEl.querySelector('.sidebar button, .sidebar a[href]')?.focus();
+  };
+  navToggle.addEventListener('click', () => setNav(!appEl.classList.contains('nav-open')));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && appEl.classList.contains('nav-open')) {
+      e.stopPropagation();
+      setNav(false);
+      navToggle.focus();
+    }
+  }, true);
+  $('sidebar').addEventListener('click', (e) => {
+    if (narrow.matches && e.target.closest('button, a[href]')) setNav(false);
+  });
+  narrow.addEventListener('change', () => setNav(false));
+
   els.menu.addEventListener('keydown', (e) => {
     const items = menuItems();
     const i = items.indexOf(document.activeElement);
@@ -683,7 +758,7 @@
               onclick: () => selectWorkspace(ws.id)
             },
             [
-              el('span', { class: 'ws-badge', style: `--ws-hue:${workspaceHue(ws)}`, 'aria-hidden': 'true', text: initialOf(ws.name) }),
+              el('span', { class: 'ws-badge', 'data-ws': workspaceDot(ws), 'aria-hidden': 'true', text: initialOf(ws.name) }),
               el('span', { class: 'label', text: ws.name }),
               el('span', { class: 'count', text: String(counts.get(ws.id) || 0) })
             ]
@@ -694,13 +769,10 @@
     });
   }
 
-  /** A steady hue per workspace for its badge, picked from hues that sit with the paper colors. */
-  const WS_HUES = [40, 150, 250, 85, 330, 200, 15, 285];
-  function workspaceHue(ws) {
-    let h = 0;
-    for (const ch of String(ws.id)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  /** Workspace dot 1-6 (--ws-1..--ws-6, SPEC-v3 §13), by workspace order, wrapping after six. */
+  function workspaceDot(ws) {
     const i = state.workspaces.indexOf(ws);
-    return WS_HUES[(i >= 0 ? i : h) % WS_HUES.length];
+    return i >= 0 ? String((i % 6) + 1) : undefined;
   }
 
   const initialOf = (text) => {
@@ -716,7 +788,6 @@
         state.selectedTag = null;
         state.selected.clear();
         state.focusId = null;
-        state.animateNext = true;
       }
       showView('notes');
       await reload();
@@ -959,7 +1030,7 @@
     const title = note.title || 'Untitled';
     const color = colorOf(note.color);
     const selected = state.selected.has(note.id);
-    const card = el('article', {
+    const card = el('div', {
       class: `note-card${note.visible ? ' visible-note' : ''}${color.ink === 'light' ? ' ink-light' : ''}${selected ? ' selected' : ''}`,
       role: 'listitem',
       tabindex: '-1',
@@ -977,7 +1048,7 @@
     });
     check.addEventListener('change', () => toggleSelected(note.id, check.checked));
 
-    const titleEl = el('h3', { class: 'note-title', text: title, title: 'Double-click to rename' });
+    const titleEl = el('h2', { class: 'note-title', text: title, title: 'Double-click to rename' });
     titleEl.addEventListener('dblclick', (e) => {
       e.stopPropagation();
       startRename(note.id);
@@ -1002,12 +1073,18 @@
     });
 
     const terms = searchTerms();
-    const body = el('div', { class: 'card-body', 'aria-hidden': 'true' });
+    const body = el('div', { class: 'card-body', 'aria-hidden': 'true', inert: '' });
     const text = bodyText(note);
     if (text.trim()) body.innerHTML = md.renderMarkdown(text.slice(0, 1500));
     else body.appendChild(el('p', { class: 'card-empty', text: 'Empty note' }));
     const snippetEl = el('p', { class: 'note-snippet', text: snippetFor(note, terms) || 'Empty note' });
-    const tagsEl = el('span', { class: 'card-tags' }, (note.tags || []).map((t) => el('span', { class: 'tag-pill', text: `#${t}` })));
+    const tags = note.tags || [];
+    // Two pills and a +N: three pills never fit the list's tag column whole.
+    const shownTags = tags.length > 2 ? tags.slice(0, 2) : tags;
+    const tagsEl = el('span', { class: 'card-tags', title: tags.length > shownTags.length ? tags.map((t) => `#${t}`).join(' ') : undefined }, [
+      ...shownTags.map((t) => el('span', { class: 'tag-pill', text: `#${t}` })),
+      ...(tags.length > shownTags.length ? [el('span', { class: 'tag-pill tag-more', text: `+${tags.length - shownTags.length}` })] : [])
+    ]);
     for (const node of [titleEl, snippetEl, body, tagsEl]) highlight(node, terms);
 
     const openBtn = el(
@@ -1017,7 +1094,7 @@
         class: 'icon-btn open-btn',
         title: note.visible ? 'Hide this note from the screen' : 'Show this note on screen'
       },
-      [icon(note.visible ? 'eye-off' : 'eye'), el('span', { class: 'sr-only', text: note.visible ? 'Hide' : 'Open' })]
+      [icon(note.visible ? 'eye-off' : 'eye'), el('span', { class: 'sr-only', text: `${note.visible ? 'Hide' : 'Open'} ${title}` })]
     );
     openBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1095,7 +1172,6 @@
       els.noteList.classList.toggle('list', state.layout === 'list');
       els.noteList.replaceChildren(...state.notes.map(noteCard));
       const cards = cardEls();
-      if (state.animateNext) animateIn(cards);
       const keep = cards.find((c) => c.dataset.noteId === state.focusId) || cards[0];
       if (keep) keep.tabIndex = 0;
       if (hadFocus && keep) keep.focus();
@@ -1108,17 +1184,6 @@
     fitCardBodies();
   }
 
-  /** Cards settle in one after another after the layout or the workspace changes. */
-  function animateIn(cards) {
-    state.animateNext = false;
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    cards.slice(0, 24).forEach((card, i) => card.style.setProperty('--i', String(i)));
-    els.noteList.classList.remove('entering');
-    void els.noteList.offsetWidth;
-    els.noteList.classList.add('entering');
-    clearTimeout(state.enterTimer);
-    state.enterTimer = setTimeout(() => els.noteList.classList.remove('entering'), 900);
-  }
 
   /**
    * Board previews end at the last paragraph, list item, or table row that
@@ -1150,7 +1215,6 @@
   function setLayout(layout) {
     if (layout === state.layout) return;
     state.layout = layout;
-    state.animateNext = true;
     els.btnBoard.setAttribute('aria-pressed', String(layout === 'board'));
     els.btnList.setAttribute('aria-pressed', String(layout === 'list'));
     renderNotes();
@@ -1288,7 +1352,8 @@
     const finish = async (save) => {
       if (finished) return;
       finished = true;
-      const value = input.value.trim() || 'Untitled';
+      // An empty name hands the title back to the note's first line.
+      const value = input.value.trim();
       try {
         if (save && value !== note.title) await updateNoteOrThrow(noteId, { title: value });
       } catch (err) {
@@ -1458,16 +1523,47 @@
 
   // ---------- trash ----------
 
+  // After Restore or Delete forever removes a row, focus goes to the row now in
+  // its place (the next one), else the one before, else the Trash heading, so
+  // keyboard users never land on the page body (WCAG 2.4.3).
+  let trashFocusAfter = null;
+
+  function sortedTrash() {
+    return [...state.trash].sort((a, b) => Date.parse(b.trashedAt) - Date.parse(a.trashedAt));
+  }
+
+  function rememberTrashFocus(note, action) {
+    const index = sortedTrash().findIndex((n) => n.id === note.id);
+    trashFocusAfter = { id: note.id, index: Math.max(0, index), action };
+  }
+
+  function applyTrashFocus() {
+    if (!trashFocusAfter || state.trash.some((n) => n.id === trashFocusAfter.id)) return;
+    if ($('trashView').hidden) return;
+    const { index, action } = trashFocusAfter;
+    trashFocusAfter = null;
+    const rows = [...els.trashList.querySelectorAll('.note-card')];
+    const row = rows[Math.min(index, rows.length - 1)];
+    const target = row && row.querySelector(action === 'delete' ? '.text-btn.danger' : '.text-btn:not(.danger)');
+    if (target) target.focus();
+    else $('trashTitle').focus();
+  }
+
   function renderTrash() {
-    const list = [...state.trash].sort((a, b) => Date.parse(b.trashedAt) - Date.parse(a.trashedAt));
+    const list = sortedTrash();
+    // Re-rendering replaces the rows; keep focus on the same button if it had it.
+    const active = els.trashList.contains(document.activeElement) ? document.activeElement : null;
+    const keep = active && active.closest('.note-card')
+      ? { id: active.closest('.note-card').dataset.noteId, danger: active.classList.contains('danger') }
+      : null;
     els.trashList.replaceChildren(
       ...list.map((note) => {
         const title = note.title || 'Untitled';
         const age = Math.floor((Date.now() - Date.parse(note.trashedAt)) / 86400000);
         const left = Math.max(1, TRASH_DAYS - age);
-        const row = el('article', { class: 'note-card', role: 'listitem', 'data-note-id': note.id }, [
-          el('span', { class: 'paper-dot', 'aria-hidden': 'true', 'data-initial': initialOf(title) }),
-          el('h3', { class: 'note-title', text: title }),
+        const row = el('div', { class: 'note-card', role: 'listitem', 'data-note-id': note.id }, [
+          el('span', { class: `paper-dot${colorOf(note.color).ink === 'light' ? ' ink-light' : ''}`, 'aria-hidden': 'true', 'data-initial': initialOf(title) }),
+          el('h2', { class: 'note-title', text: title }),
           el('p', { class: 'note-snippet', text: snippet(note) || 'Empty note' }),
           el('span', {
             class: 'trash-left',
@@ -1486,7 +1582,7 @@
               type: 'button',
               class: 'text-btn danger',
               text: 'Delete forever',
-              'aria-label': `Delete ${title} forever`,
+              'aria-label': `Delete forever ${title}`,
               onclick: () => confirmDeleteForever(note)
             })
           ])
@@ -1498,11 +1594,21 @@
     els.trashList.hidden = list.length === 0;
     els.trashEmpty.classList.toggle('hidden', list.length > 0);
     els.btnEmptyTrash.disabled = list.length === 0;
+    if (keep) {
+      const row = [...els.trashList.querySelectorAll('.note-card')].find((r) => r.dataset.noteId === keep.id);
+      const btn = row && row.querySelector(keep.danger ? '.text-btn.danger' : '.text-btn:not(.danger)');
+      if (btn) btn.focus();
+    }
+    applyTrashFocus();
   }
 
   async function restoreFromTrash(note) {
+    rememberTrashFocus(note, 'restore');
     const restored = await run('Could not restore the note', () => api.restoreNote(note.id));
-    if (!restored) return;
+    if (!restored) {
+      trashFocusAfter = null;
+      return;
+    }
     const ws = state.workspaces.find((w) => w.id === restored.workspaceId);
     showToast(`Restored “${note.title || 'Untitled'}”${ws ? ` to ${ws.name}` : ''}`, {
       label: 'Show it',
@@ -1520,9 +1626,16 @@
           label: 'Delete forever',
           danger: true,
           onClick: async () => {
-            await api.deleteNote(note.id);
-            closeModal();
+            rememberTrashFocus(note, 'delete');
+            try {
+              await api.deleteNote(note.id);
+            } catch (err) {
+              trashFocusAfter = null;
+              throw err;
+            }
+            closeModal({ restoreFocus: false });
             await reload();
+            applyTrashFocus();
           }
         }
       ]
@@ -1541,8 +1654,11 @@
           danger: true,
           onClick: async () => {
             await api.emptyTrash();
-            closeModal();
+            // No rows are left: focus goes to the Trash heading, not the now-disabled button.
+            trashFocusAfter = { id: null, index: 0, action: 'empty' };
+            closeModal({ restoreFocus: false });
             await reload();
+            applyTrashFocus();
           }
         }
       ]
@@ -1698,7 +1814,7 @@
           ]);
         });
         table.replaceChildren(
-          el('thead', {}, [el('tr', {}, ['Action', 'Shortcut', 'Works', 'Status', ''].map((h) => el('th', { text: h })))]),
+          el('thead', {}, [el('tr', {}, [...['Action', 'Shortcut', 'Works', 'Status'].map((h) => el('th', { text: h })), el('th', {}, [el('span', { class: 'sr-only', text: 'Change' })])])]),
           el('tbody', {}, rows)
         );
       };
@@ -1829,7 +1945,17 @@
         markTheme(value);
         if (await saveSettings({ theme: value })) await reload();
       }
-    }, [el('span', { class: 'theme-preview', 'aria-hidden': 'true' }), el('span', { class: 'theme-name', text: label })]);
+    }, [themePreview(value), el('span', { class: 'theme-name', text: label })]);
+  }
+
+  /** A flat sketch of two notes on the desk in that theme. System shows light and dark side by side. */
+  function themePreview(value) {
+    const desk = (tone) => el('span', { class: `tp-desk tp-${tone}` }, [
+      el('span', { class: 'tp-note tp-a' }, [el('span', { class: 'tp-line' })]),
+      el('span', { class: 'tp-note tp-b' }, [el('span', { class: 'tp-line' })])
+    ]);
+    const parts = value === 'system' ? [desk('light'), desk('dark')] : [desk(value)];
+    return el('span', { class: 'theme-preview', 'aria-hidden': 'true' }, parts);
   }
 
   function markTheme(value) {
@@ -1840,7 +1966,7 @@
 
   function saveFontSize(value) {
     const font = $('sFont');
-    const size = Math.min(28, Math.max(10, Math.round(Number(value) || 14)));
+    const size = Math.min(28, Math.max(12, Math.round(Number(value) || 14)));
     font.value = String(size);
     saveSettings({ defaultFontSize: size });
   }
@@ -1879,7 +2005,7 @@
     });
     opacity.addEventListener('change', () => saveSettings({ defaultOpacity: Number(opacity.value) / 100 }));
 
-    const font = el('input', { id: 'sFont', type: 'number', min: '10', max: '28', 'aria-label': 'Text size in pixels' });
+    const font = el('input', { id: 'sFont', type: 'number', min: '12', max: '28', 'aria-label': 'Text size in pixels' });
     font.addEventListener('change', () => saveFontSize(font.value));
     const step = (delta, name, label) =>
       el('button', { type: 'button', class: 'icon-btn', 'aria-label': label, onclick: () => saveFontSize(Number(font.value) + delta) }, [icon(name)]);
@@ -1997,7 +2123,7 @@
       $('sOpacityOut').textContent = `${opacity.value}%`;
     }
     const font = $('sFont');
-    if (font && document.activeElement !== font) font.value = String(s.defaultFontSize || 14);
+    if (font && document.activeElement !== font) font.value = String(Math.min(28, Math.max(12, Number(s.defaultFontSize) || 14)));
     const setCheck = (id, value, enabled = true) => {
       const box = $(id);
       if (!box) return;
@@ -2242,7 +2368,7 @@
     state.tags = tags;
     if (boot.settings.sortBy) {
       state.sortBy = boot.settings.sortBy;
-      els.sortLabel.textContent = (SORTS.find((x) => x.value === state.sortBy) || SORTS[0]).label;
+      setSortLabel((SORTS.find((x) => x.value === state.sortBy) || SORTS[0]).label);
     }
     if (state.selectedTag && !tags.includes(state.selectedTag)) state.selectedTag = null;
     renderSaveBanner(boot.saveError);
@@ -2280,6 +2406,12 @@
     });
   }
 
+  /** The sort button shows only the order; its accessible name says what it is for. */
+  function setSortLabel(label) {
+    els.sortLabel.textContent = label;
+    els.sortBy.setAttribute('aria-label', `Sort by: ${label}`);
+  }
+
   els.sortBy.addEventListener('click', () => {
     if (anchorJustClosed(els.sortBy)) return;
     openMenu(
@@ -2288,7 +2420,7 @@
         checked: sort.value === state.sortBy,
         onSelect: async () => {
           state.sortBy = sort.value;
-          els.sortLabel.textContent = sort.label;
+          setSortLabel(sort.label);
           await api.updateSettings({ sortBy: sort.value });
           await reloadNotesOnly();
         }
@@ -2493,7 +2625,7 @@
       .map((w) => ({
         group: 'Workspaces',
         label: w.name,
-        badge: { hue: workspaceHue(w), text: initialOf(w.name) },
+        badge: { dot: workspaceDot(w), text: initialOf(w.name) },
         hint: w.id === state.activeWorkspaceId && state.view === 'notes' ? 'Current' : 'Go to',
         run: () => selectWorkspace(w.id)
       }));
@@ -2522,7 +2654,7 @@
       const lead = item.tint
         ? el('span', { class: 'cmdk-paper', style: `--tint:${item.tint}`, 'aria-hidden': 'true' })
         : item.badge
-          ? el('span', { class: 'ws-badge', style: `--ws-hue:${item.badge.hue}`, 'aria-hidden': 'true', text: item.badge.text })
+          ? el('span', { class: 'ws-badge', 'data-ws': item.badge.dot, 'aria-hidden': 'true', text: item.badge.text })
           : el('span', { class: 'cmdk-icon', 'aria-hidden': 'true' }, [icon(item.icon || 'arrow-right')]);
       const label = el('span', { class: 'cmdk-label', text: item.label });
       highlight(label, terms);
@@ -2548,6 +2680,9 @@
     }
     els.cmdkList.replaceChildren(...nodes);
     els.cmdkInput.setAttribute('aria-activedescendant', palette.items.length ? `cmdk-opt-${palette.index}` : '');
+    // The empty row is presentational, so screen readers hear it through a live region.
+    const status = palette.items.length ? '' : `Nothing matches “${query.trim()}”.`;
+    if (els.cmdkStatus.textContent !== status) els.cmdkStatus.textContent = status;
   }
 
   function setPaletteIndex(i) {
@@ -2574,6 +2709,7 @@
   function closePalette({ restoreFocus = true } = {}) {
     if (els.cmdk.classList.contains('hidden')) return;
     els.cmdk.classList.add('hidden');
+    els.cmdkStatus.textContent = '';
     if (restoreFocus && palette.lastFocus && palette.lastFocus.isConnected) palette.lastFocus.focus();
   }
 
@@ -2678,7 +2814,7 @@
     els.quickFindKey.textContent = isMac() ? '⌘K' : 'Ctrl K';
     els.btnQuickFind.title = `Quick find (${modLabel()}K)`;
     await reload();
-    els.search.focus();
+    // No autofocus: the field rests on its hairline; "/" or a click focuses it.
   }
 
   init().catch((err) => {

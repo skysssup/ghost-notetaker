@@ -165,7 +165,8 @@ async function recordNotes() {
     const before = new Set((await noteBounds(app)).map((w) => w.id));
     key('ctrl+shift+n');
     const { id, bounds } = await waitFor(async () => (await noteBounds(app)).find((w) => !before.has(w.id)), 'the new note');
-    if (Math.abs(bounds.x - 536) > 2 || Math.abs(bounds.y - 158) > 2) throw new Error(`The new note opened at ${bounds.x},${bounds.y}; run again`);
+    // The window is the paper (main/note-geometry.js): the pointer plus 16px, plus the 8px saved-bounds inset.
+    if (Math.abs(bounds.x - 552) > 2 || Math.abs(bounds.y - 174) > 2) throw new Error(`The new note opened at ${bounds.x},${bounds.y}; run again`);
     const page = await pageOf(app, id);
     await useRealFocus(page);
     await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'editor');

@@ -134,6 +134,16 @@ async function stubOpenExternal(app) {
   });
 }
 
+/** True when an EWMH window manager runs on $DISPLAY (it places and moves windows). */
+function hasWindowManager() {
+  if (process.platform !== 'linux' || !process.env.DISPLAY) return false;
+  try {
+    return /window id #/.test(execFileSync('xprop', ['-root', '_NET_SUPPORTING_WM_CHECK'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+  } catch {
+    return false;
+  }
+}
+
 function hasXdotool() {
   if (process.platform !== 'linux' || !process.env.DISPLAY) return false;
   try {
@@ -197,6 +207,7 @@ async function showNotes(manager) {
 }
 
 module.exports = {
+  hasWindowManager,
   ROOT,
   tempDir,
   launch,

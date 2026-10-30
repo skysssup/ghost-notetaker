@@ -45,8 +45,15 @@ function hideDockIcon() {
   }
 }
 
+/**
+ * Every note window has this title, whatever the note is called: window titles
+ * show in the taskbar, window switchers, and screen-share pickers.
+ */
+const NOTE_WINDOW_TITLE = 'Ghost Note';
+
 function noteWindowOptions(bounds) {
   const opts = {
+    title: NOTE_WINDOW_TITLE,
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
@@ -56,8 +63,9 @@ function noteWindowOptions(bounds) {
     frame: false,
     transparent: true,
     resizable: true,
-    // The paper draws its own shadow inside the window's transparent margin.
-    hasShadow: false,
+    // The window is the paper (transparent only so its corners can be rounded). macOS adds
+    // its native window shadow, the one shadow a note has; elsewhere the paper is flat.
+    hasShadow: isMac(),
     show: false,
     skipTaskbar: true,
     focusable: true,
@@ -146,6 +154,7 @@ function getLaunchAtLogin() {
 }
 
 module.exports = {
+  NOTE_WINDOW_TITLE,
   isMac,
   isWin,
   capabilities,

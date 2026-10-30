@@ -4,7 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
+/**
+ * Stores before this version saved "Untitled" for every note nobody named; the
+ * one-time upgrade on load clears those titles so they follow their first line.
+ */
+const UNTITLED_CLEARED_VERSION = 3;
 
 // Paper colors. `ink` is the text color that reads on the paper. The ids are
 // stored in notes files and never change.
@@ -27,7 +32,7 @@ const TEMPLATES = {
   blank: {
     id: 'blank',
     label: 'Blank note',
-    title: 'Untitled',
+    title: '',
     content: ''
   },
   meeting: {
@@ -175,6 +180,17 @@ const TAG_MAX_LEN = 32;
 const TAG_MAX_COUNT = 48;
 
 /** Lowercase, trim, drop empties, dedupe — keeps first-seen casing form as lowercase. */
+/** Longest unfinished tag kept with a note: the tag field's own limit. */
+const TAG_DRAFT_MAX = TAG_MAX_LEN;
+
+/**
+ * Text typed in a note's tag field but not added as a tag yet. It is kept so
+ * that it is never lost, and is not part of search, export, or "edited".
+ */
+function normalizeTagDraft(draft) {
+  return typeof draft === 'string' ? draft.replace(/[\r\n]+/g, ' ').slice(0, TAG_DRAFT_MAX) : '';
+}
+
 function normalizeTags(tags) {
   if (!Array.isArray(tags)) return [];
   const seen = new Set();
@@ -195,6 +211,64 @@ function normalizeTags(tags) {
 
 function clampTitle(title) {
   return String(title != null ? title : 'Untitled').slice(0, TITLE_MAX);
+}
+
+const DEFAULT_TITLE = 'Untitled';
+/** Longest title taken from a note's text; longer first lines end in an ellipsis. */
+const DERIVED_TITLE_MAX = 60;
+
+/**
+ * A title that means "no title of its own": empty or only whitespace. A title
+ * someone typed is kept as typed, even when it is literally "Untitled".
+ */
+function isBlankTitle(title) {
+  return String(title == null ? '' : title).trim() === '';
+}
+
+/**
+ * The title an untitled note shows: its first line with words in it, without
+ * Markdown markers (headings, quotes, list and task markers, emphasis, code,
+ * links, images, HTML), whitespace collapsed, and at most DERIVED_TITLE_MAX
+ * characters (cut at a word when possible). Returns '' when there is no such line.
+ */
+function deriveTitle(content) {
+  const lines = String(content || '').replace(/<!--[\s\S]*?-->/g, '').split(/\r?\n/);
+  for (const raw of lines) {
+    // Code fences, horizontal rules, and table separators carry no words.
+    if (/^\s*(```|~~~)/.test(raw)) continue;
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(raw)) continue;
+    if (/^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(raw)) continue;
+    let t = raw
+      .replace(/^\s*(?:>\s?)+/, '')
+      .replace(/^\s*#{1,6}(?:\s+|$)/, '')
+      .replace(/\s+#+\s*$/, '')
+      .replace(/^\s*(?:[-*+]|\d{1,9}[.)])\s+/, '')
+      .replace(/^\[[ xX]\]\s*/, '')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+      .replace(/`+/g, '')
+      .replace(/~~/g, '')
+      .replace(/(\*{1,3}|_{1,3})(?=\S)([\s\S]*?\S)\1(?![\w*])/g, '$2')
+      .replace(/\|/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!/[\p{L}\p{N}]/u.test(t)) continue;
+    const chars = Array.from(t);
+    if (chars.length > DERIVED_TITLE_MAX) {
+      let cut = chars.slice(0, DERIVED_TITLE_MAX - 1).join('');
+      const space = cut.lastIndexOf(' ');
+      if (space >= DERIVED_TITLE_MAX / 2) cut = cut.slice(0, space);
+      t = `${cut.replace(/[\s.,;:!?-]+$/, '')}…`;
+    }
+    return t;
+  }
+  return '';
+}
+
+/** The title shown for a note with no title of its own. */
+function autoTitleFor(content) {
+  return deriveTitle(content) || DEFAULT_TITLE;
 }
 
 function clampContent(content) {
@@ -272,12 +346,20 @@ function isIsoDate(value) {
 function createNoteRecord(partial = {}, settings = null) {
   const stamp = nowIso();
   const defaults = settings || defaultSettings();
+  const content = clampContent(partial.content != null ? partial.content : '');
+  // Notes saved before titles were derived have no flag: only an empty or blank
+  // title means nobody named the note, so only those take their first line. A
+  // stored "Untitled" is kept, since it may be a title someone typed.
+  const autoTitle =
+    typeof partial.autoTitle === 'boolean' ? partial.autoTitle : isBlankTitle(partial.title);
   return {
     id: partial.id || createId('note'),
     workspaceId: partial.workspaceId,
-    title: clampTitle(partial.title != null ? partial.title : 'Untitled'),
-    content: clampContent(partial.content != null ? partial.content : ''),
+    title: autoTitle ? autoTitleFor(content) : clampTitle(partial.title != null ? partial.title : DEFAULT_TITLE),
+    autoTitle,
+    content,
     tags: normalizeTags(partial.tags),
+    tagDraft: normalizeTagDraft(partial.tagDraft),
     color: isKnownColor(partial.color)
       ? partial.color
       : isKnownColor(defaults.defaultColor)
@@ -288,9 +370,12 @@ function createNoteRecord(partial = {}, settings = null) {
       0.25,
       1
     ),
+    // Stored sizes keep their value (older versions allowed 10-11px); the note
+    // window and its preview show anything under 12 at 12. New values from
+    // the UI are clamped to 12..28 in updateNote, createNote and ipc-guards.
     fontSize: clamp(
       partial.fontSize != null ? Number(partial.fontSize) : defaults.defaultFontSize,
-      10,
+      STORED_FONT_MIN,
       28
     ),
     monospace: partial.monospace != null ? Boolean(partial.monospace) : Boolean(defaults.defaultMonospace),
@@ -306,6 +391,9 @@ function createNoteRecord(partial = {}, settings = null) {
     updatedAt: partial.updatedAt || stamp
   };
 }
+
+// Older versions stored sizes down to 10px; those are kept as they are.
+const STORED_FONT_MIN = 10;
 
 function clamp(n, min, max) {
   if (!Number.isFinite(n)) return min;
@@ -341,6 +429,29 @@ function validateBackupRecords(raw) {
   }
 }
 
+/**
+ * One-time upgrades of a store file or backup older than STORE_VERSION, run by
+ * load() and importAll() before migrate(). A missing version counts as old; a
+ * current one is returned as is. Pure: returns a copy.
+ */
+function upgradeStoreFile(raw) {
+  const from = Number.isInteger(raw.version) ? raw.version : 0;
+  let out = raw;
+  if (from < UNTITLED_CLEARED_VERSION && Array.isArray(raw.notes)) {
+    // "Untitled" was the default title, not a choice: hand those notes to their
+    // first line. After this runs once, a note titled "Untitled" is kept.
+    out = {
+      ...out,
+      notes: raw.notes.map((n) => {
+        if (!n || typeof n !== 'object' || n.title !== DEFAULT_TITLE) return n;
+        const { autoTitle: _drop, ...rest } = n;
+        return { ...rest, title: '' };
+      })
+    };
+  }
+  return out;
+}
+
 function migrate(raw) {
   if (!raw || typeof raw !== 'object') return emptyState();
   const state = emptyState();
@@ -369,7 +480,9 @@ function migrate(raw) {
     ? settings.recentNoteIds.map(String).slice(0, 12)
     : [];
   settings.defaultOpacity = clamp(Number(settings.defaultOpacity), 0.25, 1);
-  settings.defaultFontSize = clamp(Number(settings.defaultFontSize), 10, 28);
+  // Kept as stored (may be 10-11 from an older version); new notes and the
+  // settings field use at least 12.
+  settings.defaultFontSize = clamp(Number(settings.defaultFontSize), STORED_FONT_MIN, 28);
   settings.contentProtection = settings.contentProtection !== false;
   settings.launchAtLogin = Boolean(settings.launchAtLogin);
   settings.globalClickThrough = Boolean(settings.globalClickThrough);
@@ -520,6 +633,7 @@ class Store {
     }
     const text = fs.readFileSync(this.filePath, 'utf8');
     let raw;
+    let upgrading = false;
     try {
       raw = JSON.parse(text);
     } catch (parseErr) {
@@ -536,9 +650,20 @@ class Store {
         throw new Error('Store workspaces must be an array when present');
       }
       validateBackupRecords(raw);
-      this.state = migrate(raw);
+      upgrading = !(Number.isInteger(raw.version) && raw.version >= STORE_VERSION);
+      this.state = migrate(upgrading ? upgradeStoreFile(raw) : raw);
     } catch (err) {
       return this._quarantineCorrupt(err);
+    }
+    if (upgrading) {
+      // Write the new version now so the upgrade runs only once. The write is
+      // atomic (temp file + rename): if it fails, the file on disk is still the
+      // old version, so the next load simply runs the same upgrade again.
+      try {
+        this.saveSync();
+      } catch (_) {
+        this.saveDeferred(SAVE_RETRY_MS);
+      }
     }
     return this.state;
   }
@@ -663,7 +788,7 @@ class Store {
       next.defaultOpacity = clamp(Number(patch.defaultOpacity), 0.25, 1);
     }
     if (patch && patch.defaultFontSize != null) {
-      next.defaultFontSize = clamp(Number(patch.defaultFontSize), 10, 28);
+      next.defaultFontSize = clamp(Number(patch.defaultFontSize), 12, 28);
     }
     if (patch && patch.recentNoteIds) {
       next.recentNoteIds = Array.isArray(patch.recentNoteIds)
@@ -822,7 +947,11 @@ class Store {
         tags: options.tags || [],
         color: options.color,
         opacity: options.opacity,
-        fontSize: options.fontSize,
+        fontSize: clamp(
+          options.fontSize != null ? Number(options.fontSize) : this.state.settings.defaultFontSize,
+          12,
+          28
+        ),
         monospace: options.monospace,
         bounds: options.bounds,
         displayId: options.displayId,
@@ -844,6 +973,7 @@ class Store {
       'title',
       'content',
       'tags',
+      'tagDraft',
       'color',
       'opacity',
       'fontSize',
@@ -861,9 +991,16 @@ class Store {
       if (patch[key] === undefined) continue;
       if (key === 'bounds') note.bounds = normalizeBounds(patch.bounds);
       else if (key === 'opacity') note.opacity = clamp(Number(patch.opacity), 0.25, 1);
-      else if (key === 'fontSize') note.fontSize = clamp(Number(patch.fontSize), 10, 28);
+      else if (key === 'fontSize') note.fontSize = clamp(Number(patch.fontSize), 12, 28);
       else if (key === 'tags') note.tags = normalizeTags(patch.tags);
-      else if (key === 'title') note.title = clampTitle(patch.title);
+      else if (key === 'tagDraft') note.tagDraft = normalizeTagDraft(patch.tagDraft);
+      else if (key === 'title') {
+        // Typing a title names the note for good, even "Untitled"; clearing it
+        // hands the title to the note's first line again.
+        const title = clampTitle(patch.title);
+        note.autoTitle = isBlankTitle(title);
+        if (!note.autoTitle) note.title = title;
+      }
       else if (key === 'content') note.content = clampContent(patch.content);
       else if (key === 'workspaceId') {
         if (this.state.workspaces.some((w) => w.id === patch.workspaceId)) {
@@ -886,6 +1023,7 @@ class Store {
         note[key] = patch[key];
       }
     }
+    if (note.autoTitle) note.title = autoTitleFor(note.content);
     // Window geometry, visibility, and styling are not edits: only text changes
     // move a note's "edited" time and its place in the recent list.
     if (JSON.stringify([note.title, note.content, note.tags]) !== textBefore) {
@@ -1105,11 +1243,13 @@ class Store {
     if (!['merge', 'replace'].includes(mode)) throw new Error('Invalid import mode');
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid import payload');
     validateBackupRecords(payload);
+    // An old backup gets the same one-time upgrade as an old store file.
+    const source = upgradeStoreFile(payload);
     const previous = structuredClone(this.state);
     const wasDirty = this._dirty;
     try {
-      this._importImages(payload.images);
-      const result = this._importAll(payload, mode);
+      this._importImages(source.images);
+      const result = this._importAll(source, mode);
       this.flush();
       return result;
     } catch (error) {
@@ -1260,15 +1400,20 @@ class Store {
       if (!file || !fs.existsSync(file)) return ref;
       return `data:${IMAGE_MIME[name.split('.').pop()]};base64,${fs.readFileSync(file).toString('base64')}`;
     });
+    // A derived title is the first line already; a heading would repeat it.
+    if (note.autoTitle && deriveTitle(note.content)) return `${content}${tags}\n`;
     return `# ${note.title}\n\n${content}${tags}\n`;
   }
 }
 
 module.exports = {
+  TAG_DRAFT_MAX,
   Store,
   IMAGE_MIME,
   imageType,
   STORE_VERSION,
+  UNTITLED_CLEARED_VERSION,
+  upgradeStoreFile,
   NOTE_COLORS,
   TEMPLATES,
   TITLE_MAX,
@@ -1283,6 +1428,9 @@ module.exports = {
   createId,
   clamp,
   clampTitle,
+  deriveTitle,
+  isBlankTitle,
+  DERIVED_TITLE_MAX,
   clampContent,
   normalizeTags,
   normalizeBounds,

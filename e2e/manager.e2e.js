@@ -129,7 +129,7 @@ describe('notes manager', () => {
     await manager.click('#btnTrash');
     const trashed = manager.locator('#trashList .note-card', { hasText: 'Launch checklist' });
     await trashed.waitFor();
-    await trashed.getByRole('button', { name: /Delete .* forever/ }).click();
+    await trashed.getByRole('button', { name: /Delete forever / }).click();
     assert.match(await manager.locator('#modalBody').textContent(), /cannot be undone/);
     await manager.click('#modalFooter .danger-btn');
     await waitForStore(dataFile, (s) => !s.notes.some((n) => n.id === welcomeId), 'deleted on disk');
@@ -159,6 +159,21 @@ describe('notes manager', () => {
     assert.equal(store.notes[0].trashedAt, null);
     await showNotes(manager);
     await waitFor(async () => (await cardTitles(manager)).join() === 'Ghost Notetaker', 'restored card');
+  });
+
+  it('the sort button and each card\'s show/hide button say what they are for', async () => {
+    const { manager } = await start();
+    const sort = manager.getByRole('button', { name: /sort/i });
+    assert.equal(await sort.count(), 1);
+    assert.equal(await sort.getAttribute('aria-label'), 'Sort by: Last edited');
+    await sort.click();
+    await manager.getByRole('menuitemradio', { name: 'Title' }).or(manager.getByRole('menuitem', { name: 'Title' })).first().click();
+    await waitFor(async () => (await sort.getAttribute('aria-label')) === 'Sort by: Title', 'sort name follows the choice');
+
+    const welcome = card(manager, 'Ghost Notetaker');
+    assert.equal(await welcome.getByRole('button', { name: 'Hide Ghost Notetaker', exact: true }).count(), 1);
+    await welcome.getByRole('button', { name: 'Hide Ghost Notetaker', exact: true }).click();
+    await waitFor(async () => (await welcome.getByRole('button', { name: 'Open Ghost Notetaker', exact: true }).count()) === 1, 'open button named');
   });
 
   it('hiding from the manager keeps text the note had not saved yet', async () => {

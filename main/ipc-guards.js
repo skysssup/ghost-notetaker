@@ -5,6 +5,7 @@ const {
   CONTENT_MAX,
   TAG_MAX_COUNT,
   TAG_MAX_LEN,
+  TAG_DRAFT_MAX,
   NOTE_COLORS,
   defaultShortcuts,
   clamp,
@@ -32,11 +33,12 @@ function sanitizeNotePatch(patch) {
   if (patch.title !== undefined) out.title = String(patch.title).slice(0, TITLE_MAX);
   if (patch.content !== undefined) out.content = String(patch.content).slice(0, CONTENT_MAX);
   if (patch.tags !== undefined) out.tags = normalizeTags(patch.tags);
+  if (patch.tagDraft !== undefined) out.tagDraft = String(patch.tagDraft).slice(0, TAG_DRAFT_MAX);
   if (patch.color !== undefined && NOTE_COLORS.some((c) => c.id === patch.color)) {
     out.color = patch.color;
   }
   if (patch.opacity !== undefined) out.opacity = clamp(Number(patch.opacity), 0.25, 1);
-  if (patch.fontSize !== undefined) out.fontSize = clamp(Number(patch.fontSize), 10, 28);
+  if (patch.fontSize !== undefined) out.fontSize = clamp(Number(patch.fontSize), 12, 28);
   if (patch.monospace !== undefined) out.monospace = Boolean(patch.monospace);
   if (patch.pinned !== undefined) out.pinned = Boolean(patch.pinned);
   if (patch.clickThrough !== undefined) out.clickThrough = Boolean(patch.clickThrough);
@@ -100,7 +102,7 @@ function sanitizeSettingsPatch(patch) {
     out.defaultOpacity = clamp(Number(patch.defaultOpacity), 0.25, 1);
   }
   if (patch.defaultFontSize != null) {
-    out.defaultFontSize = clamp(Number(patch.defaultFontSize), 10, 28);
+    out.defaultFontSize = clamp(Number(patch.defaultFontSize), 12, 28);
   }
   if (patch.defaultColor && NOTE_COLORS.some((c) => c.id === patch.defaultColor)) {
     out.defaultColor = patch.defaultColor;

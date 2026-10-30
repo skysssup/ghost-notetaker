@@ -5,7 +5,7 @@
   "main": "main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test",
+    "test": "node --test \"test/**/*.test.js\"",
     "test:e2e": "node --test --test-concurrency=1 \"e2e/*.e2e.js\"",
     "smoke:packaged": "node scripts/smoke-packaged.js",
     "icons": "electron scripts/render-icons.js",
@@ -30,7 +30,7 @@
     "workspaces"
   ],
   "devDependencies": {
-    "electron": "^42.11.10",
+    "electron": "^42.11.18",
     "electron-builder": "^26.15.3",
     "playwright": "^1.63.0",
     "pngjs": "^7.0.0"

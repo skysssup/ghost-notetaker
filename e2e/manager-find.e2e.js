@@ -204,6 +204,9 @@ describe('finding notes in the manager', () => {
     await open();
     await manager.keyboard.type('zzzz nothing');
     await waitFor(async () => (await manager.locator('#cmdkList .cmdk-empty').count()) === 1, 'no results');
+    // Screen readers hear it from a polite live region inside the dialog.
+    const status = manager.locator('#cmdk [role="status"][aria-live="polite"]');
+    await waitFor(async () => (await status.textContent()).includes('Nothing matches “zzzz nothing”'), 'announced');
     await manager.keyboard.press('Enter');
     assert.equal(await closed(), false);
     await manager.keyboard.press('Escape');

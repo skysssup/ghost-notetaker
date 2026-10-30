@@ -1,14 +1,15 @@
 'use strict';
 
 const path = require('path');
-const { Tray, Menu, nativeImage } = require('electron');
+const { Tray, Menu, nativeImage, nativeTheme } = require('electron');
 const { isMac, capabilities } = require('./platform');
 const { TEMPLATES } = require('./store');
 
 function createTrayImage() {
   // macOS menu-bar icons are template images: black shapes the system tints.
-  // Other platforms get the colored icon.
-  const file = isMac() ? 'trayTemplate.png' : 'tray-icon.png';
+  // Other platforms get the one-colour line mark: light on a dark taskbar, dark on a light one.
+  const darkBar = nativeTheme.shouldUseDarkColorsForSystemIntegratedUI ?? nativeTheme.shouldUseDarkColors;
+  const file = isMac() ? 'trayTemplate.png' : darkBar ? 'tray-icon.png' : 'tray-icon-dark.png';
   const img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', file));
   if (isMac()) img.setTemplateImage(true);
   return img;
@@ -132,6 +133,11 @@ function createAppTray(api) {
     if (process.platform === 'win32' || process.platform === 'linux') api.openManager();
   });
   tray.on('double-click', () => api.openManager());
+  // Follow a light/dark taskbar change live (Windows/Linux pick a light or dark mark).
+  const onTheme = () => {
+    if (!tray.isDestroyed()) tray.setImage(createTrayImage());
+  };
+  nativeTheme.on('updated', onTheme);
   return { tray, rebuild };
 }
 

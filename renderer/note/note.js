@@ -34,10 +34,29 @@
     btnHide: $('btnHide'),
     tagChips: $('tagChips'),
     tagInput: $('tagInput'),
+    noteRegion: $('noteRegion'),
+    noteHeading: $('noteHeading'),
     saveStatus: $('saveStatus'),
     bubble: $('bubble'),
     bubbleInitial: $('bubbleInitial')
   };
+
+  // Tiny notes (paper < 300px): Reading mode, Click-through and Collapse move from the capsule into
+  // the "Appearance and more" panel, so the capsule (More, Hide) never sits on the title (SPEC §5 L-TINY).
+  const COMPACT_BELOW = 300;
+  const capsule = els.shell.querySelector('.chrome-buttons');
+  const compactActions = $('compactActions');
+  const movable = ['btnPreview', 'btnGhost', 'btnCollapse'].map((id) => $(id));
+  new ResizeObserver(([entry]) => {
+    const compact = entry.contentRect.width < COMPACT_BELOW;
+    if (compact === els.shell.classList.contains('compact')) return;
+    const hadFocus = movable.find((b) => b === document.activeElement);
+    els.shell.classList.toggle('compact', compact);
+    compactActions.hidden = !compact;
+    if (compact) compactActions.append(...movable);
+    else capsule.prepend(...movable);
+    hadFocus?.focus();
+  }).observe(els.shell);
 
   const SAVE_FAILED = 'Not saved yet. Your text is kept here and saving is retried.';
   const DISK_FAILED = 'Not written to disk yet. Ghost Notetaker keeps your text and retries.';
@@ -56,9 +75,9 @@
   let shownView = null;
 
   const BUBBLE = 56;
-  const colorOf = (id) => colors.find((x) => x.id === id) || { hex: '#e7e9ea', ink: 'dark' };
+  const colorOf = (id) => colors.find((x) => x.id === id) || colors.find((x) => x.id === 'mist') || { hex: getComputedStyle(document.documentElement).getPropertyValue('--paper-mist').trim(), ink: 'dark' };
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const morphMs = () => (reducedMotion.matches ? 0 : 240);
+  const morphMs = () => (reducedMotion.matches ? 0 : 160);
   // Panels follow the app theme (System, Light, or Dark) chosen in Settings.
   const applyTheme = (dark) => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
@@ -102,8 +121,15 @@
       label.textContent = `#${tag}`;
       chip.append(label, icon('x'));
       chip.addEventListener('click', () => {
+        const index = (note.tags || []).indexOf(tag);
+        const hadFocus = document.activeElement === chip;
         queueSave({ tags: (note.tags || []).filter((t) => t !== tag) });
         renderTags();
+        // Keep the keyboard in the tag row: the next tag, else the one before, else Add tag.
+        if (hadFocus) {
+          const chips = els.tagChips.querySelectorAll('button.tag');
+          (chips[index] || chips[index - 1] || els.tagInput).focus();
+        }
       });
       els.tagChips.appendChild(chip);
     });
@@ -112,7 +138,8 @@
   function applyStyle() {
     const color = colorOf(note.color);
     const opacityPct = Math.round((note.opacity || 1) * 100);
-    const fontSize = note.fontSize || 14;
+    // Notes saved at 10-11px by older versions show at the 12px floor; the stored value is left alone.
+    const fontSize = Math.min(28, Math.max(12, Number(note.fontSize) || 14));
     els.opacity.value = opacityPct;
     els.opacityValue.textContent = `${opacityPct}%`;
     els.fontSize.value = fontSize;
@@ -130,10 +157,38 @@
     for (const swatch of els.palette.children) {
       swatch.setAttribute('aria-checked', String(swatch.dataset.color === note.color));
     }
-    const initial = /[\p{L}\p{N}]/u.exec(note.title || '');
+    renderTitleLabels();
+  }
+
+  /**
+   * Everything outside the title box that names the note: the bubble and the
+   * note region's accessible name. The window title stays generic on purpose
+   * (it shows in the taskbar and screen-share pickers), so it is not set here.
+   */
+  function renderTitleLabels() {
+    const title = note.title || 'Untitled';
+    const initial = /[\p{L}\p{N}]/u.exec(title);
     els.bubbleInitial.textContent = initial ? initial[0].toUpperCase() : '';
-    els.bubble.title = note.title || 'Untitled';
-    els.bubble.setAttribute('aria-label', `Expand ${note.title || 'Untitled'}`);
+    els.bubble.title = title;
+    els.bubble.setAttribute('aria-label', `Expand ${title}`);
+    els.noteRegion.setAttribute('aria-label', `Note: ${title}`);
+    els.noteHeading.textContent = title;
+  }
+
+  /**
+   * An untitled note's title follows its first line, worked out by the store on
+   * save. The save reply carries it back because the main process does not echo
+   * a window's own edits; a title box being typed in is left alone.
+   */
+  function syncDerivedTitle(saved) {
+    if (!saved || !note || typeof saved.title !== 'string') return;
+    const pending = saveQueue.pendingPatch() || {};
+    if (pending.title !== undefined) return;
+    note.autoTitle = saved.autoTitle;
+    if (!saved.autoTitle || saved.title === note.title) return;
+    note.title = saved.title;
+    if (document.activeElement !== els.title) setValuePreservingSelection(els.title, saved.title);
+    renderTitleLabels();
   }
 
   /** Which view the note shows right now. */
@@ -162,6 +217,7 @@
     else if (!els.bubble.classList.contains('appearing')) els.bubble.hidden = view !== 'bubble';
     els.editor.classList.toggle('hidden', showPreview);
     els.preview.classList.toggle('hidden', !showPreview);
+    queueSnap();
     els.mdToolbar.classList.toggle('hidden', showPreview);
     if (showPreview) setMdOverflow(false);
     els.shell.classList.toggle('reading', view === 'reading');
@@ -180,8 +236,12 @@
   function applyLocal(incoming) {
     applying = true;
     note = { ...incoming, ...(saveQueue.pendingPatch() || {}) };
-    setValuePreservingSelection(els.title, note.title || '');
+    // A derived title must not replace what someone is typing into the title box.
+    if (!(note.autoTitle && document.activeElement === els.title)) {
+      setValuePreservingSelection(els.title, note.title || '');
+    }
     setValuePreservingSelection(els.editor, note.content || '');
+    if (document.activeElement !== els.tagInput) els.tagInput.value = note.tagDraft || '';
     applyStyle();
     render();
     renderTags();
@@ -189,8 +249,60 @@
   }
 
   function renderPreview() {
-    els.preview.innerHTML = md.renderMarkdown(els.editor.value);
+    // The content sits in its own box so snapPreview() can clip it without clipping the
+    // view's focus ring, which is drawn on #preview itself.
+    els.preview.innerHTML = `<div class="preview-body">${md.renderMarkdown(els.editor.value)}</div>`;
+    queueSnap();
   }
+
+  /**
+   * The formatted view ends on a whole line: a line cut by the bottom edge (a tiny note,
+   * long text) is clipped away entirely instead of showing half its glyphs above the tags.
+   * Clipping, not an overlay, so it works on see-through paper too.
+   */
+  function queueSnap() {
+    if (queueSnap.queued) return;
+    queueSnap.queued = true;
+    requestAnimationFrame(() => {
+      queueSnap.queued = false;
+      snapPreview();
+    });
+  }
+
+  function snapPreview() {
+    const p = els.preview;
+    const body = p.firstElementChild;
+    if (!body) return;
+    body.style.removeProperty('clip-path');
+    if (p.classList.contains('hidden') || p.scrollHeight - p.scrollTop - p.clientHeight < 1) return;
+    const box = p.getBoundingClientRect();
+    const bottom = box.top + p.clientTop + p.clientHeight;
+    let top = Infinity;
+    const consider = (r) => {
+      if (r.height > 0 && r.top < bottom - 0.5 && r.bottom > bottom + 0.5) top = Math.min(top, r.top);
+    };
+    const range = document.createRange();
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.data.trim()) continue;
+      range.selectNodeContents(node);
+      for (const r of range.getClientRects()) consider(r);
+    }
+    for (const el of body.querySelectorAll('img, input, hr')) consider(el.getBoundingClientRect());
+    if (top > box.top && top < Infinity) {
+      // Clip to the view's visible box, 2px inside it so the content never paints over the
+      // focus ring (a clip-path box paints above its parent's outline), and from the cut
+      // line's top down.
+      const b = body.getBoundingClientRect();
+      const ring = 2;
+      const t = box.top + p.clientTop + ring - b.top;
+      const l = box.left + p.clientLeft + ring - b.left;
+      const r = b.right - (box.left + p.clientLeft + p.clientWidth - ring);
+      const bt = b.bottom - Math.floor(top);
+      body.style.clipPath = `inset(${t}px ${r}px ${Math.max(0, bt)}px ${l}px)`;
+    }
+  }
+
 
   /** Fade the formatted view and the editor into each other. */
   function crossfade(outgoing, incoming) {
@@ -216,7 +328,22 @@
     els.shell.style.setProperty('--to-bubble-y', String(BUBBLE / height));
   }
 
+  /** Where focus was in the note before it became a bubble, to return there on expanding. */
+  let focusBeforeCollapse = null;
+
+  function canFocus(el) {
+    return Boolean(el && el.isConnected && !el.disabled && !el.closest('[hidden], .hidden') && el.getClientRects().length);
+  }
+
+  /** Focus that went nowhere (the page itself, or a part of the note that is now hidden). */
+  function focusIsLost() {
+    const active = document.activeElement;
+    return !active || active === document.body || active === document.documentElement || !canFocus(active);
+  }
+
   async function collapseToBubble() {
+    const active = document.activeElement;
+    focusBeforeCollapse = active && els.shell.contains(active) ? active : null;
     setBubbleScale();
     els.shell.classList.add('collapsing');
     els.bubble.hidden = false;
@@ -227,12 +354,36 @@
     els.shell.classList.remove('collapsing');
     els.bubble.classList.remove('appearing');
     els.bubble.hidden = currentView() !== 'bubble';
+    // The control that was focused is hidden now; keyboard and screen reader
+    // users land on the bubble instead of the page.
+    if (!els.bubble.hidden && (focusBeforeCollapse || focusIsLost())) els.bubble.focus();
+  }
+
+  /**
+   * After expanding, return to the text field that had focus before collapsing,
+   * or else to the note text (the editor while editing, the formatted note otherwise).
+   * Focus that is somewhere useful already is left alone.
+   */
+  function restoreFocusAfterExpand() {
+    if (!focusIsLost() && document.activeElement !== els.bubble) return;
+    const before = focusBeforeCollapse;
+    focusBeforeCollapse = null;
+    const textFields = [els.title, els.editor, els.tagInput];
+    if (textFields.includes(before) && canFocus(before)) {
+      before.focus();
+      return;
+    }
+    const body = currentView() === 'editing' ? els.editor : els.preview;
+    if (canFocus(body)) body.focus();
+    else if (canFocus(els.title)) els.title.focus();
   }
 
   function expandFromBubble() {
     setBubbleScale();
     els.shell.classList.add('expanding');
     els.bubble.classList.add('leaving');
+    // After render() has shown the editor or the formatted note.
+    requestAnimationFrame(restoreFocusAfterExpand);
     setTimeout(() => {
       els.shell.classList.remove('expanding');
       els.bubble.classList.remove('leaving');
@@ -273,6 +424,8 @@
     render();
   }
 
+  els.preview.addEventListener('scroll', queueSnap, { passive: true });
+  new ResizeObserver(queueSnap).observe(els.preview);
   els.preview.addEventListener('click', (e) => {
     const check = e.target.closest('.task-check');
     if (check) {
@@ -316,6 +469,7 @@
       try {
         const result = await window.ghostNote.updateNote(noteId, patch);
         if (result && result.__saveError) throw new Error(result.__saveError);
+        syncDerivedTitle(result);
         localSaveFailed = false;
         renderSaveStatus();
         return result;
@@ -386,6 +540,23 @@
   function setMdOverflow(open) {
     els.mdToolbar.classList.toggle('overflow-open', open);
     els.btnMdMore.setAttribute('aria-expanded', String(open));
+    // The toolbar's one Tab stop must stay on a button that is shown.
+    const stop = els.mdToolbar.querySelector('button[tabindex="0"]');
+    if (!open && stop && stop.closest('.md-more') && !stop.getClientRects().length) {
+      setToolbarStop(els.mdToolbar.querySelector('button'));
+    }
+  }
+
+  // ---------- toolbar keyboard (roving tab stop) ----------
+  // The formatting toolbar is one Tab stop; Left/Right (and Home/End) move
+  // between its shown buttons, wrapping around, as in the ARIA toolbar pattern.
+
+  function setToolbarStop(target) {
+    for (const b of els.mdToolbar.querySelectorAll('button')) b.tabIndex = b === target ? 0 : -1;
+  }
+
+  function shownToolbarButtons() {
+    return Array.from(els.mdToolbar.querySelectorAll('button')).filter((b) => b.getClientRects().length);
   }
 
   function setMoreOpen(open) {
@@ -472,6 +643,24 @@
   });
 
   els.btnMdMore.addEventListener('click', () => setMdOverflow(!els.mdToolbar.classList.contains('overflow-open')));
+
+  setToolbarStop(els.mdToolbar.querySelector('button'));
+  els.mdToolbar.addEventListener('focusin', (e) => {
+    const btn = e.target.closest('button');
+    if (btn) setToolbarStop(btn);
+  });
+  els.mdToolbar.addEventListener('keydown', (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!step && e.key !== 'Home' && e.key !== 'End') return;
+    const items = shownToolbarButtons();
+    const i = items.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const next =
+      e.key === 'Home' ? items[0] : e.key === 'End' ? items[items.length - 1] : items[(i + step + items.length) % items.length];
+    setToolbarStop(next);
+    next.focus();
+  });
   addEventListener('resize', () => setMdOverflow(false));
 
   // ---------- images ----------
@@ -565,6 +754,12 @@
   els.title.addEventListener('input', () => {
     queueSave({ title: els.title.value });
     applyStyle();
+  });
+  // A title box left empty shows the title taken from the first line again.
+  els.title.addEventListener('blur', () => {
+    if (note && note.autoTitle && !els.title.value.trim()) {
+      setValuePreservingSelection(els.title, note.title || 'Untitled');
+    }
   });
   els.editor.addEventListener('input', () => queueSave({ content: els.editor.value }));
   els.editor.addEventListener('focus', () => {
@@ -666,22 +861,32 @@
       .toLowerCase()
       .slice(0, 32);
     els.tagInput.value = '';
-    if (!raw) return;
-    queueSave({ tags: Array.from(new Set([...(note.tags || []), raw])) });
+    if (!raw) {
+      queueSave({ tagDraft: '' });
+      return;
+    }
+    queueSave({ tags: Array.from(new Set([...(note.tags || []), raw])), tagDraft: '' });
     renderTags();
   }
 
+  // Only Enter or a comma adds a tag. Tab and clicking away move on without
+  // adding one, and the typed text is never thrown away: it stays in the field
+  // and is saved with the note (tagDraft), so it is still there when the note
+  // is opened again, until it is added or cleared with Escape.
+  els.tagInput.addEventListener('input', () => queueSave({ tagDraft: els.tagInput.value }));
   els.tagInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
+    if ((e.key === 'Enter' && !e.isComposing) || e.key === ',') {
       e.preventDefault();
       addTagFromInput();
+    } else if (e.key === 'Escape' && els.tagInput.value) {
+      e.preventDefault();
+      e.stopPropagation();
+      els.tagInput.value = '';
+      queueSave({ tagDraft: '' });
     } else if (e.key === 'Backspace' && !els.tagInput.value && (note.tags || []).length) {
       queueSave({ tags: note.tags.slice(0, -1) });
       renderTags();
     }
-  });
-  els.tagInput.addEventListener('blur', () => {
-    if (els.tagInput.value.trim()) addTagFromInput();
   });
 
   els.editor.addEventListener('keydown', (e) => {

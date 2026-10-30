@@ -26,6 +26,26 @@ Markdown sticky notes that float above your other windows.
 
 [![In the Notes Manager, a search narrows the list to Groceries, the board shows each note as a card, Workout gets a new paper from its right-click menu, and Settings switches to the dark theme](docs/demo/manager.webp)](docs/demo/manager.mp4)
 
+## A closer look
+
+The first start opens a welcome note that explains the basics, and the Notes Manager lists it:
+
+<p>
+  <img src="docs/screenshots/first-run-note.png" width="300" alt="The welcome note on first start: a Welcome heading, a short explanation, and three unticked tasks about collapsing, hiding, and opening the Notes Manager">
+  <img src="docs/screenshots/first-run-manager.png" width="520" alt="The Notes Manager on first start, with the Personal workspace holding the single welcome note">
+</p>
+
+Moving a note to the trash can be undone from the message that appears. An empty workspace says how to start a note, and anything permanent asks first:
+
+<p>
+  <img src="docs/screenshots/toast.png" width="410" alt="The Notes Manager list with a message at the bottom: Weekend moved to the trash, with an Undo button">
+  <img src="docs/screenshots/empty-workspace.png" width="410" alt="An empty Side project workspace: a ghost, No notes in this workspace, and a New note button">
+</p>
+<p>
+  <img src="docs/screenshots/dialog-empty-trash.png" width="410" alt="The Trash with three notes and a dialog asking Empty the trash?, with Cancel and Empty trash buttons">
+  <img src="docs/screenshots/search-rest.png" width="410" alt="The search field at rest: a thin outline, the placeholder Search notes, and a slash key hint">
+</p>
+
 ## Install
 
 Download the file for your system from the [latest release](https://github.com/skysssup/ghost-notetaker/releases/latest).

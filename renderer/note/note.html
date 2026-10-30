@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- avoid-ai-design-ignore-file: K7 (focus rings are the :focus-visible rules in note.css; a parse of this file alone cannot see them) -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -64,6 +65,7 @@
           <button type="button" id="btnHide" class="icon-btn close" title="Hide note" aria-label="Hide note"><svg class="ico"><use href="#i-x" /></svg></button>
         </div>
         <div id="morePanel" class="more-panel hidden" role="group" aria-label="Note appearance">
+          <div id="compactActions" class="panel-section compact-actions" role="group" aria-label="Note actions" hidden></div>
           <div class="panel-section">
             <div class="panel-label" id="paletteLabel">Paper</div>
             <div id="palette" class="palette" role="radiogroup" aria-labelledby="paletteLabel"></div>
@@ -76,7 +78,7 @@
             </label>
             <label class="panel-row" for="fontSize">
               <span>Text size</span>
-              <input id="fontSize" type="range" min="10" max="28" value="14" />
+              <input id="fontSize" type="range" min="12" max="28" value="14" />
               <output id="fontSizeValue" for="fontSize">14px</output>
             </label>
           </div>
@@ -90,36 +92,38 @@
         </div>
       </header>
 
-      <div id="mdToolbar" class="md-toolbar" aria-label="Markdown toolbar">
-        <div class="md-group">
-          <button type="button" data-md="h2" title="Heading" aria-label="Heading"><svg class="ico"><use href="#i-heading-2" /></svg></button>
-          <button type="button" data-md="bold" title="Bold (Ctrl/Cmd+B)" aria-label="Bold"><svg class="ico"><use href="#i-bold" /></svg></button>
-          <button type="button" data-md="italic" title="Italic (Ctrl/Cmd+I)" aria-label="Italic"><svg class="ico"><use href="#i-italic" /></svg></button>
-          <button type="button" data-md="strike" title="Strikethrough" aria-label="Strikethrough"><svg class="ico"><use href="#i-strikethrough" /></svg></button>
-          <button type="button" data-md="code" title="Inline code" aria-label="Inline code"><svg class="ico"><use href="#i-code" /></svg></button>
-          <button type="button" data-md="link" title="Link (Ctrl/Cmd+K)" aria-label="Insert link"><svg class="ico"><use href="#i-link" /></svg></button>
+      <main id="noteRegion" class="note-main" aria-label="Note">
+        <h1 id="noteHeading" class="sr-only">Note</h1>
+        <div id="mdToolbar" class="md-toolbar" role="toolbar" aria-label="Markdown toolbar" aria-controls="editor">
+          <div class="md-group">
+            <button type="button" data-md="h2" title="Heading" aria-label="Heading"><svg class="ico"><use href="#i-heading-2" /></svg></button>
+            <button type="button" data-md="bold" title="Bold (Ctrl/Cmd+B)" aria-label="Bold"><svg class="ico"><use href="#i-bold" /></svg></button>
+            <button type="button" data-md="italic" title="Italic (Ctrl/Cmd+I)" aria-label="Italic"><svg class="ico"><use href="#i-italic" /></svg></button>
+            <button type="button" data-md="strike" title="Strikethrough" aria-label="Strikethrough"><svg class="ico"><use href="#i-strikethrough" /></svg></button>
+            <button type="button" data-md="code" title="Inline code" aria-label="Inline code"><svg class="ico"><use href="#i-code" /></svg></button>
+            <button type="button" data-md="link" title="Link (Ctrl/Cmd+K)" aria-label="Insert link"><svg class="ico"><use href="#i-link" /></svg></button>
+          </div>
+          <span class="md-sep" aria-hidden="true"></span>
+          <div class="md-group md-more">
+            <button type="button" data-md="ul" title="Bullet list" aria-label="Bullet list"><svg class="ico"><use href="#i-list" /></svg></button>
+            <button type="button" data-md="ol" title="Numbered list" aria-label="Numbered list"><svg class="ico"><use href="#i-list-ordered" /></svg></button>
+            <button type="button" data-md="task" title="Checklist" aria-label="Checklist"><svg class="ico"><use href="#i-square-check" /></svg></button>
+            <button type="button" data-md="quote" title="Quote" aria-label="Quote"><svg class="ico"><use href="#i-text-quote" /></svg></button>
+            <button type="button" data-md="table" title="Table" aria-label="Insert table"><svg class="ico"><use href="#i-table" /></svg></button>
+            <button type="button" data-md="hr" title="Divider" aria-label="Divider"><svg class="ico"><use href="#i-minus" /></svg></button>
+          </div>
+          <button type="button" id="btnMdMore" class="md-overflow" title="More formatting" aria-label="More formatting" aria-expanded="false"><svg class="ico"><use href="#i-ellipsis" /></svg></button>
         </div>
-        <span class="md-sep" aria-hidden="true"></span>
-        <div class="md-group md-more">
-          <button type="button" data-md="ul" title="Bullet list" aria-label="Bullet list"><svg class="ico"><use href="#i-list" /></svg></button>
-          <button type="button" data-md="ol" title="Numbered list" aria-label="Numbered list"><svg class="ico"><use href="#i-list-ordered" /></svg></button>
-          <button type="button" data-md="task" title="Checklist" aria-label="Checklist"><svg class="ico"><use href="#i-square-check" /></svg></button>
-          <button type="button" data-md="quote" title="Quote" aria-label="Quote"><svg class="ico"><use href="#i-text-quote" /></svg></button>
-          <button type="button" data-md="table" title="Table" aria-label="Insert table"><svg class="ico"><use href="#i-table" /></svg></button>
-          <button type="button" data-md="hr" title="Divider" aria-label="Divider"><svg class="ico"><use href="#i-minus" /></svg></button>
+        <div class="body">
+          <textarea
+            id="editor"
+            class="editor"
+            spellcheck="true"
+            placeholder="Write in Markdown. Paste or drop an image to add it."
+            aria-label="Note content"
+          ></textarea>
+          <div id="preview" class="preview hidden" aria-live="polite" role="article" aria-label="Formatted note" tabindex="0"></div>
         </div>
-        <button type="button" id="btnMdMore" class="md-overflow" title="More formatting" aria-label="More formatting" aria-expanded="false"><svg class="ico"><use href="#i-ellipsis" /></svg></button>
-      </div>
-
-      <main class="body">
-        <textarea
-          id="editor"
-          class="editor"
-          spellcheck="true"
-          placeholder="Write in Markdown. Paste or drop an image to add it."
-          aria-label="Note content"
-        ></textarea>
-        <div id="preview" class="preview hidden" aria-live="polite" role="article" aria-label="Formatted note" tabindex="0"></div>
       </main>
 
       <footer class="status">

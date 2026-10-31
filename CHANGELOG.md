@@ -4,8 +4,8 @@
 
 ### Changed
 
-- **New look.** A calm, flat interface: opaque surfaces with one hairline, shadows only on menus, dialogs and other overlays, one plum accent (Damson) on plum-grey neutrals, and the notes' paper colours as the only strong colour. Instrument Sans throughout, with Instrument Serif for view titles. A monochrome line-ghost icon, and a tray icon that follows a light or dark taskbar, switching as soon as the taskbar theme changes. No gradients, blur, glows, springs or looping animation; motion is a short fade or 2px slide and stops entirely with Reduce motion.
-- **Dark mode board.** Cards are neutral and show their paper colour as an edge, so the board does not glare at night.
+- **New look.** A calm, flat interface: opaque surfaces with one hairline, shadows only on menus, dialogs and other overlays, one plum accent (Damson) on plum-grey neutrals, and the notes' paper colours as the only strong colour. Instrument Sans throughout, with Instrument Serif for view titles. A monochrome line-ghost icon, and a tray icon that follows a light or dark taskbar, switching as soon as the taskbar theme changes. No gradients, blur, glows, springs or looping animation; motion is a short fade with a 4 to 10px rise and a 0.96 to 0.97 scale on menus, dialogs and the command palette (the toast rises 10px), and it stops entirely with Reduce motion.
+- **Dark mode board.** Cards on light papers are neutral, so the board does not glare at night; cards on dark papers keep their own colour.
 - **Workspaces** have a neutral initial badge with a small colour-blind-safe dot, assigned by workspace order (the seventh workspace reuses the first colour).
 - **Note windows fill their window.** The transparent margin around each note is gone, so clicks just outside the paper reach the desktop. Saved positions are unchanged. On macOS the system window shadow is the note's shadow.
 - **Small notes.** At the smallest size (220×180) the formatting bar, tags and status all fit below at least three lines of text while you type.

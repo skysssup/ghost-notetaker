@@ -75,7 +75,10 @@
   let shownView = null;
 
   const BUBBLE = 56;
-  const colorOf = (id) => colors.find((x) => x.id === id) || colors.find((x) => x.id === 'mist') || { hex: getComputedStyle(document.documentElement).getPropertyValue('--paper-mist').trim(), ink: 'dark' };
+  // The fallback paper, read from tokens.css once rather than on every lookup.
+  let fallbackPaper = null;
+  const fallbackHex = () => fallbackPaper || (fallbackPaper = getComputedStyle(document.documentElement).getPropertyValue('--paper-mist').trim());
+  const colorOf = (id) => colors.find((x) => x.id === id) || colors.find((x) => x.id === 'mist') || { hex: fallbackHex(), ink: 'dark' };
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const morphMs = () => (reducedMotion.matches ? 0 : 160);
   // Panels follow the app theme (System, Light, or Dark) chosen in Settings.

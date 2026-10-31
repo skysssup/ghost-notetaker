@@ -117,6 +117,76 @@ describe('v3 design', () => {
     assert.equal(text, 'bold and strong and it and em · snake_case_name 2*3 init.py');
   });
 
+  it('list previews keep a "*" inside words and strip ***both*** markers', async () => {
+    const ctx = await start();
+    const manager = await openManager(ctx.app);
+    await manager.evaluate(() =>
+      window.ghostManager.createNote({ title: 'Sums', content: '2*3*4 = 24\n***both*** and a*b and c*d\n**bold**, *it* and snake_case' })
+    );
+    const card = manager.locator('#noteList .note-card', { hasText: 'Sums' });
+    await card.waitFor();
+    const text = await card.locator('.note-snippet').textContent();
+    assert.equal(text, '2*3*4 = 24 · both and a*b and c*d · bold, it and snake_case');
+  });
+
+  it('with more contrast note body text keeps the full ink (APCA Lc 75, 4.5:1 on every paper)', async () => {
+    const ctx = await start();
+    const papers = [...fs.readFileSync(require.resolve('../main/store.js'), 'utf8').matchAll(/id: '(\w+)', hex: '(#[0-9a-f]{6})'.*?ink: '(\w+)'/g)].map((m) => ({ id: m[1], hex: m[2], ink: m[3] }));
+    assert.equal(papers.length, 12);
+    const measure = () =>
+      ctx.note.evaluate((list) => {
+        const shell = document.querySelector('.shell');
+        const rgba = (v) => {
+          const c = document.createElement('canvas').getContext('2d');
+          c.fillStyle = v;
+          c.fillRect(0, 0, 1, 1);
+          return [...c.getImageData(0, 0, 1, 1).data];
+        };
+        const lum = (rgb) => {
+          const l = rgb.map((v) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+          return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+        };
+        // APCA 0.0.98G-4g (W3C silver), |Lc| of text on background.
+        const apca = (txt, bg) => {
+          const y = (rgb) => {
+            const v = 0.2126729 * (rgb[0] / 255) ** 2.4 + 0.7151522 * (rgb[1] / 255) ** 2.4 + 0.072175 * (rgb[2] / 255) ** 2.4;
+            return v < 0.022 ? v + (0.022 - v) ** 1.414 : v;
+          };
+          const yt = y(txt);
+          const yb = y(bg);
+          const c = yb > yt ? (yb ** 0.56 - yt ** 0.57) * 1.14 : (yb ** 0.65 - yt ** 0.62) * 1.14;
+          if (Math.abs(c) < 0.1) return 0;
+          return Math.abs((c > 0 ? c - 0.027 : c + 0.027) * 100);
+        };
+        const was = shell.classList.contains('ink-light');
+        const out = {};
+        for (const p of list) {
+          shell.classList.toggle('ink-light', p.ink === 'light');
+          const s = getComputedStyle(shell);
+          const ink2 = rgba(s.getPropertyValue('--ink-2').trim());
+          const ink = rgba(s.getPropertyValue('--ink').trim());
+          const paper = rgba(p.hex);
+          const a = ink2[3] / 255;
+          const text = [0, 1, 2].map((i) => Math.round(ink2[i] * a + paper[i] * (1 - a)));
+          const [hi, lo] = [lum(text), lum(paper)].sort((x, y) => y - x);
+          out[p.id] = { full: ink2.join() === ink.join(), ratio: +((hi + 0.05) / (lo + 0.05)).toFixed(2), lc: +apca(text, paper).toFixed(1) };
+        }
+        shell.classList.toggle('ink-light', was);
+        return { hc: matchMedia('(prefers-contrast: more)').matches, out };
+      }, papers);
+    const normal = await measure();
+    await ctx.note.emulateMedia({ contrast: 'more' });
+    const more = await measure();
+    assert.equal(normal.hc, false);
+    assert.equal(more.hc, true, 'prefers-contrast: more is on');
+    for (const [id, r] of Object.entries(more.out)) {
+      assert.equal(r.full, true, `${id}: body ink is the full ink under more contrast`);
+      assert.ok(r.lc >= normal.out[id].lc, `${id}: Lc ${r.lc} is not below the default ${normal.out[id].lc}`);
+      assert.ok(r.lc >= 75, `${id}: body Lc ${r.lc}`);
+      assert.ok(r.ratio >= 4.5, `${id}: body ${r.ratio}:1`);
+    }
+  });
+
   it('the active tag filter chip shows a long tag in full', async () => {
     const ctx = await start();
     const manager = await openManager(ctx.app);

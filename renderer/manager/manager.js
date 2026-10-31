@@ -118,6 +118,8 @@
   let listSeq = 0;
   // Counts settings saves, so a reload that read the settings before a save does not undo it on screen.
   let settingsSaves = 0;
+  // Where focus goes after a Restore or Delete forever in the Trash (see trash).
+  let trashFocusAfter = null;
 
   // ---------- helpers ----------
 
@@ -136,9 +138,13 @@
     { value: 'color', label: 'Color' }
   ];
 
+  // The fallback paper for an unknown colour id, read from tokens.css once.
+  let fallbackPaper = null;
+  const fallbackHex = () => fallbackPaper || (fallbackPaper = getComputedStyle(document.documentElement).getPropertyValue('--paper-mist').trim());
+
   function colorOf(id) {
     const colors = (state.bootstrap && state.bootstrap.colors) || [];
-    return colors.find((c) => c.id === id) || { id, hex: getComputedStyle(document.documentElement).getPropertyValue('--paper-mist').trim(), ink: 'dark', label: id };
+    return colors.find((c) => c.id === id) || { id, hex: fallbackHex(), ink: 'dark', label: id };
   }
 
   function formatRelative(iso) {
@@ -195,9 +201,10 @@
       .replace(/^\s*#+\s+/, '')
       .replace(/^\s*(?:>\s*)+/, '')
       .replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s*)?/, '')
-      // Paired emphasis (**bold**, __bold__, *it*, _it_) loses its markers; a lone
-      // "*" (2*3) and underscores inside words (snake_case) stay.
-      .replace(/(\*\*|\*)(?=\S)(.+?)(?<=\S)\1/g, '$2')
+      // Paired emphasis (***both***, **bold**, __bold__, *it*, _it_) loses its
+      // markers. Like the note's own renderer, a "*" or "_" inside a word is
+      // literal, so "2*3*4 = 24" and snake_case stay as written.
+      .replace(/(^|[^\p{L}\p{N}*])(\*\*\*|\*\*|\*)(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}*])/gu, '$1$3')
       .replace(/(^|[^\p{L}\p{N}_])(__|_)(?=\S)(.+?)(?<=\S)\2(?![\p{L}\p{N}_])/gu, '$1$3')
       .replace(/`+|~~/g, '')
       .replace(/^\s*\||\|\s*$/g, '')
@@ -690,6 +697,9 @@
   function showView(view, { section } = {}) {
     if (state.recording) stopRecording();
     closeMenu();
+    // A pending Trash focus target belongs to the Trash on screen when it was
+    // set; leaving the view drops it, so a later Trash render cannot move focus.
+    if (view !== state.view) trashFocusAfter = null;
     state.view = view;
     els.notesView.hidden = view !== 'notes';
     els.trashView.hidden = view !== 'trash';
@@ -1525,8 +1535,8 @@
 
   // After Restore or Delete forever removes a row, focus goes to the row now in
   // its place (the next one), else the one before, else the Trash heading, so
-  // keyboard users never land on the page body (WCAG 2.4.3).
-  let trashFocusAfter = null;
+  // keyboard users never land on the page body (WCAG 2.4.3). The target itself
+  // (trashFocusAfter) is declared with the view state, since showView clears it.
 
   function sortedTrash() {
     return [...state.trash].sort((a, b) => Date.parse(b.trashedAt) - Date.parse(a.trashedAt));

@@ -338,9 +338,7 @@
     --swatch-edge: var(--n-9);
     --text-secondary: var(--n-12);
     --text-tertiary: var(--n-11);
-    --paper-ink-secondary: rgba(31, 29, 26, 0.94);
     --paper-ink-tertiary: rgba(31, 29, 26, 0.84);
-    --paper-ink-light-secondary: rgba(243, 241, 236, 0.94);
     --paper-ink-light-tertiary: rgba(243, 241, 236, 0.88);
   }
 

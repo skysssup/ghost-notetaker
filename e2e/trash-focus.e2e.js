@@ -135,6 +135,27 @@ describe('trash focus', () => {
     assert.equal(await manager.locator('#trashList .note-card').count(), 2);
   });
 
+  it('leaving the Trash while a Restore is in flight forgets its focus target', async () => {
+    const ctx = await launch();
+    running.push(ctx.app);
+    const manager = await openManager(ctx.app);
+    const order = await trashOf(ctx, manager, ['Away A', 'Away B']);
+    // Press Restore, then go to the notes view before the answer arrives.
+    await manager.evaluate((title) => {
+      document.querySelector(`[aria-label="Restore ${title}"]`).click();
+      document.querySelector('#wsList .side-btn').click(); // the only (active) workspace
+    }, order[0]);
+    await waitForStore(ctx.dataFile, (s) => s.notes.some((n) => n.title === order[0] && !n.trashedAt), 'restored');
+    await waitFor(async () => !(await manager.locator('#notesView').isHidden()), 'notes view shown');
+    await manager.waitForTimeout(300);
+    // Coming back to the Trash must not move focus to a row on its own.
+    await manager.focus('#btnTrash');
+    await manager.keyboard.press('Enter');
+    await waitFor(async () => (await manager.locator('#trashList .note-card').count()) === 1, 'one left in the trash');
+    await manager.waitForTimeout(400);
+    assert.equal(await manager.evaluate(() => document.activeElement.id), 'btnTrash');
+  });
+
   it('a dialog whose action fails moves focus to its error, not the page', async () => {
     const ctx = await launch();
     running.push(ctx.app);

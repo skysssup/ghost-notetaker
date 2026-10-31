@@ -31,11 +31,11 @@ All fonts are self-hosted in `renderer/fonts/`. Sizes are 12 / 13 / 14 / 16 / 20
 
 ## Contrast
 
-APCA: body text Lc 75 or more, 12px meta Lc 60 or more, in both themes and on every paper. WCAG AA 4.5:1 for text and 3:1 for non-text (range tracks, switch tracks, focus rings). Secondary 12px text uses `--text-secondary`; `--text-tertiary` is for non-text marks and large text. Increased contrast strengthens hairlines and inks. Forced colours keeps outlines.
+APCA: body text Lc 75 or more, 12px meta Lc 60 or more, in both themes and on every paper. WCAG AA 4.5:1 for text and 3:1 for non-text (range tracks, switch tracks, focus rings). Secondary 12px text uses `--text-secondary`; `--text-tertiary` is for non-text marks and large text. Increased contrast strengthens hairlines, chrome secondary and tertiary text, the papers' tertiary inks, and the note's rules and outer edge; note body text already uses the full paper ink and stays at it. Forced colours keeps outlines.
 
 ## Motion
 
-Motion is opacity or a 2px translate, 120 ms (`--t-fast`) or 160 ms (`--t-160`), with no overshoot. Nothing moves on hover, and nothing loops: the "on screen" dot is static. With Reduce motion on, every transition is cut to 0 ms, including the note's collapse into its bubble.
+Motion is opacity with a short rise, 120 ms (`--t-fast`) or 160 ms (`--t-160`) ease-out, with no overshoot. Entrances are a fade with a 4 to 10px rise: menus, dialogs and the command palette rise 4 to 8px from a 0.96 to 0.97 scale, and the toast rises 10px from 0.97. The Saved pill rises only 2px. Nothing moves on hover, and nothing loops: the "on screen" dot is static. With Reduce motion on, every transition is cut to 0 ms, including the note's collapse into its bubble.
 
 ## Note window
 
